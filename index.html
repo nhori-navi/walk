@@ -9,8 +9,8 @@
 <style>
 *{box-sizing:border-box}
 body{margin:0;font-family:sans-serif;font-size:15px}
-#map{position:absolute;top:0;left:0;right:0;height:60%}
-#panel{position:absolute;top:60%;bottom:0;left:0;right:0;overflow:auto;padding:8px 10px;background:#fafafa;border-top:1px solid #ccc}
+#map{position:absolute;top:0;left:0;right:0;height:58%}
+#panel{position:absolute;top:58%;bottom:0;left:0;right:0;overflow:auto;padding:8px 10px;background:#fafafa;border-top:1px solid #ccc}
 @media (min-width:900px){
   #map{height:auto;bottom:0;right:380px}
   #panel{top:0;left:auto;width:380px;border-top:none;border-left:1px solid #ccc}
@@ -22,6 +22,12 @@ input[type=checkbox]{padding:0;margin:0 4px 0 0}
 #sub{font-size:14px;color:#444;margin:2px 0 6px;line-height:1.6}
 .hit{padding:8px;border-bottom:1px solid #ddd;cursor:pointer;background:#fff}
 .small{color:#777;font-size:12px;margin:4px 0}
+.fav{background:#fff3cd;border:1px solid #e0a800;border-radius:14px;padding:4px 12px}
+details{margin:8px 0;background:#fff;border:1px solid #ddd;border-radius:6px;padding:6px}
+.me{width:34px;height:34px;position:relative}
+.me .dot{position:absolute;left:8px;top:8px;width:18px;height:18px;border-radius:50%;background:#1e90ff;border:3px solid #fff;box-shadow:0 0 6px rgba(0,0,0,.5)}
+.me .arw{position:absolute;left:11px;top:0;width:0;height:0;border-left:6px solid transparent;border-right:6px solid transparent;border-bottom:10px solid #1e90ff;display:none}
+.lg{display:inline-block;width:14px;height:4px;vertical-align:middle;margin:0 2px 0 6px}
 </style>
 </head>
 <body>
@@ -29,13 +35,24 @@ input[type=checkbox]{padding:0;margin:0 4px 0 0}
 <div id="panel">
   <div id="rem">目的地を設定してください</div>
   <div id="sub"></div>
-  <div><input id="search" placeholder="目的地（住所・駅名など）"><button id="searchBtn">検索</button></div>
-  <div><button id="pickBtn">地図で指定</button><button id="recalcBtn" disabled>再計算</button><button id="followBtn">追従：ON</button></div>
+  <div><input id="search" placeholder="目的地（駅名・施設名・住所）"><button id="searchBtn">検索</button></div>
   <div id="hits"></div>
-  <div class="small"><label><input type="checkbox" id="cmpChk" checked>比較用にMapboxの徒歩ルートを表示</label></div>
+  <div id="favBar"></div>
+  <div><button id="pickBtn">地図で指定</button><button id="viaBtn">経由地を指定</button><button id="viaClear" disabled>経由地を消す</button></div>
+  <div><button id="recalcBtn" disabled>再計算</button><button id="followBtn">追従：ON</button><button id="headBtn">向き：北が上</button><button id="favAdd" disabled>★登録</button></div>
+  <div class="small"><label><input type="checkbox" id="cmpChk" checked>比較用にMapboxの徒歩ルートを表示（点線）</label></div>
+  <div class="small"><label><input type="checkbox" id="netChk">道のデータを表示</label><br>
+    <span class="lg" style="background:#8a9a9a"></span>通れる道<span class="lg" style="background:#f39c12"></span>階段<span class="lg" style="background:#9b59b6"></span>つながっていない道<span class="lg" style="background:#e74c3c"></span>通行不可の印</div>
   <div id="status" class="small">現在地を取得中…</div>
   <div id="err" class="small" style="color:#c00"></div>
-  <div class="small">道路データ © OpenStreetMap contributors</div>
+  <details>
+    <summary>お気に入りの管理</summary>
+    <div id="favList"></div>
+    <div class="small">端末間で移すとき：書き出し → 文字をコピー → 別の端末に貼って読み込み</div>
+    <textarea id="favText" rows="3" style="width:100%"></textarea>
+    <button id="favExport">書き出し</button><button id="favImport">読み込み</button>
+  </details>
+  <div class="small">道路・名称検索データ © OpenStreetMap contributors</div>
 </div>
 <script>
 // ▼▼▼ トークン（車用ナビと同じもの） ▼▼▼
@@ -43,10 +60,11 @@ const TOKEN = 'pk.eyJ1IjoiaG9yaWhha28iLCJhIjoiY211djd0ejljMDA5ZjMycHYxaTY3M3BsdS
 // ▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲
 
 const MAX_M = 5000;   // 徒歩で計算する上限（直線距離）
-const MARGIN = 500;   // 出発地・目的地の周りに取る余白（m）
-const SPEED = 80;     // 分速80m（不動産広告と同じ基準）
+const MARGIN = 500;   // 周りに取る余白（m）
+const SPEED = 80;     // 分速80m
 const OVERPASS = ['https://overpass-api.de/api/interpreter', 'https://overpass.kumi.systems/api/interpreter'];
 const HW = '^(footway|path|pedestrian|steps|corridor|living_street|residential|service|unclassified|road|track|cycleway|tertiary|tertiary_link|secondary|secondary_link|primary|primary_link|trunk|trunk_link)$';
+const NET_COLOR = {ok:'#8a9a9a', steps:'#f39c12', iso:'#9b59b6', ng:'#e74c3c'};
 
 mapboxgl.accessToken = TOKEN;
 const map = new mapboxgl.Map({
@@ -56,24 +74,27 @@ const map = new mapboxgl.Map({
 map.addControl(new mapboxgl.NavigationControl(), 'top-right');
 
 const $ = id => document.getElementById(id);
-let pos = null, posMarker = null, dest = null, destMarker = null;
-let pickMode = false, follow = true, busy = false, pending = false;
+let pos = null, posMarker = null, arw = null, dest = null, destMarker = null, destName = '', via = null, viaMarker = null;
+let pickMode = null, follow = true, busy = false, pending = false;
 let graph = null, route = null, cmpCoords = null, cmpText = '';
+let headingUp = false, heading = null, hx = 0, hy = 0, lastCompass = 0, lastCam = 0;
 const errs = [];
+let favs = [];
+try { favs = JSON.parse(localStorage.getItem('walk_favs') || '[]'); } catch (e) { favs = []; }
 
 // ---------- 共通 ----------
 function showErr(m) {
   const t = new Date().toLocaleTimeString('ja-JP', {hour:'2-digit', minute:'2-digit'});
   errs.unshift(t + ' ' + m); errs.length = Math.min(errs.length, 3);
-  $('err').innerHTML = errs.map(x => `<div>${x}</div>`).join('');
+  $('err').innerHTML = errs.map(x => `<div>${esc(x)}</div>`).join('');
 }
+const esc = s => String(s).replace(/[&<>"']/g, c => ({'&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;', "'":'&#39;'}[c]));
 const status = m => { $('status').textContent = m; };
-const pause = () => new Promise(r => setTimeout(r, 30)); // 画面表示を更新させるための一時停止
+const pause = () => new Promise(r => setTimeout(r, 30));
 function setData(id, f) { const s = map.getSource(id); if (s) s.setData({type:'FeatureCollection', features:f}); }
 const line = c => [{type:'Feature', properties:{}, geometry:{type:'LineString', coordinates:c}}];
 function fmtDist(m) { return m >= 1000 ? (m / 1000).toFixed(1) + 'km' : Math.round(m / 10) * 10 + 'm'; }
 const mins = m => Math.max(1, Math.round(m / SPEED));
-function setFollow(v) { follow = v; $('followBtn').textContent = follow ? '追従：ON' : '追従：OFF'; }
 
 // ---------- 距離の計算 ----------
 function distM(a, b) {
@@ -96,17 +117,21 @@ function nearest(coords, p) {
   }
   return best;
 }
-function bboxOf(a, b, m) {
-  const lat = (a[1] + b[1]) / 2, dLat = m / 110540, dLon = m / (111320 * Math.cos(lat * Math.PI / 180));
-  return {s: Math.min(a[1], b[1]) - dLat, n: Math.max(a[1], b[1]) + dLat,
-          w: Math.min(a[0], b[0]) - dLon, e: Math.max(a[0], b[0]) + dLon};
+function bboxOf(pts, m) {
+  const lons = pts.map(p => p[0]), lats = pts.map(p => p[1]);
+  const s = Math.min(...lats), n = Math.max(...lats), w = Math.min(...lons), e = Math.max(...lons);
+  const dLat = m / 110540, dLon = m / (111320 * Math.cos((s + n) / 2 * Math.PI / 180));
+  return {s: s - dLat, n: n + dLat, w: w - dLon, e: e + dLon};
 }
 const inside = (a, b) => a.s >= b.s && a.n <= b.n && a.w >= b.w && a.e <= b.e;
 
 // ---------- 地図の準備 ----------
 map.on('load', () => {
   const empty = {type:'FeatureCollection', features:[]};
-  ['cmp', 'route'].forEach(id => map.addSource(id, {type:'geojson', data:empty}));
+  ['net', 'cmp', 'route'].forEach(id => map.addSource(id, {type:'geojson', data:empty}));
+  map.addLayer({id:'net', type:'line', source:'net', paint:{
+    'line-color':['match', ['get', 'k'], 'steps', NET_COLOR.steps, 'iso', NET_COLOR.iso, 'ng', NET_COLOR.ng, NET_COLOR.ok],
+    'line-width':['match', ['get', 'k'], 'steps', 5, 2], 'line-opacity':0.85}});
   map.addLayer({id:'cmp', type:'line', source:'cmp',
     paint:{'line-color':'#777', 'line-width':4, 'line-dasharray':[2, 1.5]}});
   map.addLayer({id:'routeCasing', type:'line', source:'route', layout:{'line-cap':'round', 'line-join':'round'},
@@ -115,10 +140,58 @@ map.on('load', () => {
     paint:{'line-color':'#1f6fd1', 'line-width':5}});
   if (route) setData('route', line(route.coords));
   if (cmpCoords) setData('cmp', line(cmpCoords));
+  drawNet();
 });
 map.on('error', e => showErr('地図エラー：' + (e.error && e.error.message ? e.error.message : '不明')));
 map.on('dragstart', () => setFollow(false));
-map.on('click', e => { if (pickMode) { pickMode = false; setDest([e.lngLat.lng, e.lngLat.lat]); } });
+map.on('rotatestart', e => { if (e.originalEvent) setFollow(false); });
+map.on('click', e => {
+  const p = [e.lngLat.lng, e.lngLat.lat];
+  if (pickMode === 'dest') { pickMode = null; destName = ''; setDest(p); }
+  else if (pickMode === 'via') { pickMode = null; setVia(p); }
+});
+
+// ---------- 追従と向き ----------
+function setFollow(v) {
+  follow = v; $('followBtn').textContent = follow ? '追従：ON' : '追従：OFF';
+  if (v) cam();
+}
+function cam() {
+  if (!follow || !pos) return;
+  const o = {center: pos, duration: 600};
+  if (headingUp && heading !== null) o.bearing = heading;
+  lastCam = Date.now(); map.easeTo(o);
+}
+function maybeRotate() {
+  if (!headingUp || !follow || heading === null) return;
+  if (Date.now() - lastCam < 300) return;
+  const d = Math.abs(((heading - map.getBearing()) % 360 + 540) % 360 - 180);
+  if (d >= 3) cam();
+}
+// 向きをならす（急に振れないよう、少しずつ近づける）
+function feedHeading(h, w) {
+  const r = h * Math.PI / 180;
+  hx = hx * (1 - w) + Math.cos(r) * w; hy = hy * (1 - w) + Math.sin(r) * w;
+  heading = (Math.atan2(hy, hx) * 180 / Math.PI + 360) % 360;
+  if (posMarker) { posMarker.setRotation(heading); arw.style.display = 'block'; }
+  maybeRotate();
+}
+// スマホの方位センサー（コンパス）
+window.addEventListener('deviceorientationabsolute', e => {
+  if (e.alpha == null) return;
+  const ang = (screen.orientation && screen.orientation.angle) || 0;
+  lastCompass = Date.now();
+  feedHeading((360 - e.alpha + ang) % 360, 0.15);
+});
+$('followBtn').onclick = () => setFollow(!follow);
+$('headBtn').onclick = () => {
+  headingUp = !headingUp;
+  $('headBtn').textContent = headingUp ? '向き：進行方向' : '向き：北が上';
+  if (headingUp) {
+    if (heading === null) status('向きの情報を待っています（コンパス、または歩き出すと取得します）…');
+    setFollow(true);
+  } else map.easeTo({bearing: 0, duration: 500});
+};
 
 // ---------- 現在地 ----------
 if ('geolocation' in navigator) {
@@ -127,53 +200,130 @@ if ('geolocation' in navigator) {
 } else showErr('この端末では位置情報が使えません');
 
 function onPos(p) {
-  pos = [p.coords.longitude, p.coords.latitude];
+  const c = p.coords;
+  pos = [c.longitude, c.latitude];
   if (!posMarker) {
-    const el = document.createElement('div');
-    el.style.cssText = 'width:18px;height:18px;border-radius:50%;background:#1e90ff;border:3px solid #fff;box-shadow:0 0 6px rgba(0,0,0,.5)';
-    posMarker = new mapboxgl.Marker({element: el}).setLngLat(pos).addTo(map);
+    const el = document.createElement('div'); el.className = 'me';
+    el.innerHTML = '<div class="arw"></div><div class="dot"></div>';
+    arw = el.querySelector('.arw');
+    posMarker = new mapboxgl.Marker({element: el, rotationAlignment: 'map'}).setLngLat(pos).addTo(map);
+    if (heading !== null) { posMarker.setRotation(heading); arw.style.display = 'block'; }
     map.jumpTo({center: pos, zoom: 15});
     if (!dest) status('目的地を検索するか、「地図で指定」を押して地図をタップしてください。');
   } else posMarker.setLngLat(pos);
-  if (follow) map.easeTo({center: pos, duration: 800});
+  // コンパスが使えないときは、GPSの進行方向で代用（ある程度の速さで歩いているときだけ）
+  if (Date.now() - lastCompass > 3000 && c.heading != null && !isNaN(c.heading) && c.speed > 0.7) feedHeading(c.heading, 0.5);
+  cam();
   updateRemain();
 }
-// 画面を戻したら、すぐに現在地を取り直す
 document.addEventListener('visibilitychange', () => {
   if (document.visibilityState === 'visible' && 'geolocation' in navigator)
     navigator.geolocation.getCurrentPosition(onPos, () => {}, {enableHighAccuracy: true, maximumAge: 0, timeout: 15000});
 });
-$('followBtn').onclick = () => { setFollow(!follow); if (follow && pos) map.easeTo({center: pos}); };
 
-// ---------- 目的地 ----------
-$('pickBtn').onclick = () => { pickMode = true; status('地図上の目的地をタップしてください。'); };
-$('searchBtn').onclick = async () => {
+// ---------- 検索（名称：OpenStreetMap／住所：Mapbox） ----------
+$('searchBtn').onclick = doSearch;
+$('search').addEventListener('keydown', e => { if (e.key === 'Enter') doSearch(); });
+async function doSearch() {
   const q = $('search').value.trim(); if (!q) return;
-  const prox = pos ? `&proximity=${pos[0]},${pos[1]}` : '';
-  const url = `https://api.mapbox.com/search/geocode/v6/forward?q=${encodeURIComponent(q)}&country=jp&language=ja&limit=5${prox}&access_token=${TOKEN}`;
+  $('hits').innerHTML = '<div class="small">検索中…</div>';
+  const [a, b] = await Promise.all([searchOsm(q), searchMapbox(q)]);
+  const all = a.concat(b);
+  $('hits').innerHTML = '';
+  all.forEach(h => {
+    const d = document.createElement('div'); d.className = 'hit';
+    d.innerHTML = `<b>${esc(h.name)}</b><br><span class="small">${esc(h.sub)}</span>`;
+    d.onclick = () => { $('hits').innerHTML = ''; destName = h.name; setDest(h.p); };
+    $('hits').appendChild(d);
+  });
+  if (!all.length) $('hits').innerHTML = '<div class="small">見つかりませんでした。別の言い方で試すか「地図で指定」を使ってください。</div>';
+}
+async function searchOsm(q) {
   try {
-    const j = await (await fetch(url)).json(); $('hits').innerHTML = '';
-    (j.features || []).forEach(f => {
-      const d = document.createElement('div'); d.className = 'hit';
-      d.textContent = f.properties.full_address || f.properties.name;
-      d.onclick = () => { $('hits').innerHTML = ''; setDest(f.geometry.coordinates); };
-      $('hits').appendChild(d);
-    });
-    if (!(j.features || []).length) $('hits').textContent = '見つかりませんでした。住所で試すか「地図で指定」を使ってください。';
-  } catch (e) { showErr('検索エラー：' + e.message); }
+    let vb = '';
+    if (pos) { const d = 0.3; vb = `&viewbox=${(pos[0] - d).toFixed(4)},${(pos[1] + d).toFixed(4)},${(pos[0] + d).toFixed(4)},${(pos[1] - d).toFixed(4)}`; }
+    const r = await fetch(`https://nominatim.openstreetmap.org/search?format=jsonv2&q=${encodeURIComponent(q)}&countrycodes=jp&accept-language=ja&limit=5${vb}`);
+    if (!r.ok) throw new Error('HTTP ' + r.status);
+    const j = await r.json();
+    return j.map(x => ({name: x.name || x.display_name.split(',')[0], sub: x.display_name, p: [Number(x.lon), Number(x.lat)]}));
+  } catch (e) { showErr('名称検索エラー：' + e.message); return []; }
+}
+async function searchMapbox(q) {
+  try {
+    const prox = pos ? `&proximity=${pos[0]},${pos[1]}` : '';
+    const j = await (await fetch(`https://api.mapbox.com/search/geocode/v6/forward?q=${encodeURIComponent(q)}&country=jp&language=ja&limit=5${prox}&access_token=${TOKEN}`)).json();
+    return (j.features || []).map(f => ({name: f.properties.name || '', sub: f.properties.full_address || '', p: f.geometry.coordinates}));
+  } catch (e) { showErr('住所検索エラー：' + e.message); return []; }
+}
+
+// ---------- 目的地・経由地 ----------
+$('pickBtn').onclick = () => { pickMode = 'dest'; status('地図上の目的地をタップしてください。'); };
+$('viaBtn').onclick = () => {
+  if (!dest) { status('先に目的地を設定してください。'); return; }
+  pickMode = 'via'; status('通りたい場所（経由地）をタップしてください。');
 };
+function clearVia() {
+  via = null; if (viaMarker) { viaMarker.remove(); viaMarker = null; }
+  $('viaClear').disabled = true;
+}
 function setDest(p) {
-  dest = p;
+  dest = p; clearVia();
   if (destMarker) destMarker.remove();
   destMarker = new mapboxgl.Marker({color: '#c0392b'}).setLngLat(p).addTo(map);
-  $('recalcBtn').disabled = false;
+  $('recalcBtn').disabled = false; $('favAdd').disabled = false;
   calc();
 }
+function setVia(p) {
+  via = p;
+  if (viaMarker) viaMarker.remove();
+  viaMarker = new mapboxgl.Marker({color: '#555', scale: 0.8}).setLngLat(p).addTo(map);
+  $('viaClear').disabled = false;
+  calc();
+}
+$('viaClear').onclick = () => { clearVia(); calc(); };
 $('recalcBtn').onclick = () => calc();
 $('cmpChk').onchange = () => {
-  if ($('cmpChk').checked) { if (route) fetchCmp(route.coords[0]); }
+  if ($('cmpChk').checked) { if (route) fetchCmp(route.pts); }
   else { cmpCoords = null; cmpText = ''; setData('cmp', []); showSummary(); }
 };
+$('netChk').onchange = () => {
+  if ($('netChk').checked && !graph) status('ルートを一度計算すると、その範囲の道が表示されます。');
+  drawNet();
+};
+
+// ---------- お気に入り ----------
+function saveFavs() {
+  try { localStorage.setItem('walk_favs', JSON.stringify(favs)); } catch (e) { showErr('お気に入りの保存に失敗しました'); }
+  renderFavs();
+}
+function renderFavs() {
+  $('favBar').innerHTML = favs.map((f, i) => `<button class="fav" data-go="${i}">★${esc(f.name)}</button>`).join('');
+  $('favBar').querySelectorAll('button').forEach(b => b.onclick = () => {
+    const f = favs[Number(b.dataset.go)]; destName = f.name; $('hits').innerHTML = ''; setDest(f.p);
+  });
+  $('favList').innerHTML = favs.length
+    ? favs.map((f, i) => `<div>${esc(f.name)}　<button data-del="${i}">削除</button></div>`).join('')
+    : '<div class="small">まだ登録がありません</div>';
+  $('favList').querySelectorAll('button').forEach(b => b.onclick = () => {
+    const i = Number(b.dataset.del);
+    if (confirm(favs[i].name + 'を削除しますか？')) { favs.splice(i, 1); saveFavs(); }
+  });
+}
+$('favAdd').onclick = () => {
+  if (!dest) return;
+  const name = prompt('お気に入りの名前', destName || '');
+  if (name && name.trim()) { favs.push({name: name.trim(), p: dest}); saveFavs(); status(name.trim() + 'を登録しました。'); }
+};
+$('favExport').onclick = () => { $('favText').value = JSON.stringify(favs); };
+$('favImport').onclick = () => {
+  try {
+    const a = JSON.parse($('favText').value);
+    if (!Array.isArray(a)) throw 0;
+    favs = a.filter(x => x && x.name && Array.isArray(x.p)); saveFavs();
+    status('お気に入りを読み込みました。');
+  } catch (e) { showErr('読み込めない形式です'); }
+};
+renderFavs();
 
 // ---------- 道のデータ（OpenStreetMap） ----------
 async function fetchOverpass(bb) {
@@ -192,7 +342,6 @@ async function fetchOverpass(bb) {
   }
   throw new Error('道のデータを取得できませんでした（' + (last && last.name === 'AbortError' ? '時間切れ' : last.message) + '）');
 }
-// 歩いてよい道かどうか
 function walkable(t) {
   t = t || {};
   const foot = t.foot || '', access = t.access || '';
@@ -201,21 +350,22 @@ function walkable(t) {
   if (t.motorroad === 'yes') return false;
   return true;
 }
-// 道の網（グラフ）を組み立てる
 function buildGraph(els) {
-  const idx = new Map(), lon = [], lat = [];
+  const idx = new Map(), lon = [], lat = [], ways = [];
   els.forEach(e => { if (e.type === 'node') { idx.set(e.id, lon.length); lon.push(e.lon); lat.push(e.lat); } });
   const adj = lon.map(() => []);
   els.forEach(e => {
-    if (e.type !== 'way' || !e.nodes || !walkable(e.tags)) return;
-    for (let i = 0; i < e.nodes.length - 1; i++) {
-      const a = idx.get(e.nodes[i]), b = idx.get(e.nodes[i + 1]);
-      if (a === undefined || b === undefined) continue;
-      const w = distM([lon[a], lat[a]], [lon[b], lat[b]]);
+    if (e.type !== 'way' || !e.nodes) return;
+    const n = e.nodes.map(id => idx.get(id)).filter(i => i !== undefined);
+    if (n.length < 2) return;
+    const ok = walkable(e.tags);
+    ways.push({n, k: !ok ? 'ng' : (e.tags && e.tags.highway === 'steps' ? 'steps' : 'ok')});
+    if (!ok) return;
+    for (let i = 0; i < n.length - 1; i++) {
+      const a = n[i], b = n[i + 1], w = distM([lon[a], lat[a]], [lon[b], lat[b]]);
       adj[a].push([b, w]); adj[b].push([a, w]);
     }
   });
-  // つながっている塊ごとに番号を付け、一番大きい塊を「本線」とする
   const comp = new Int32Array(lon.length).fill(-1);
   let cid = 0, main = -1, mainSize = 0;
   for (let s = 0; s < lon.length; s++) {
@@ -228,9 +378,18 @@ function buildGraph(els) {
     if (size > mainSize) { mainSize = size; main = cid; }
     cid++;
   }
-  return {lon, lat, adj, comp, main};
+  return {lon, lat, adj, comp, main, ways};
 }
-// いちばん近い交差点・道の点を探す（本線の中だけ）
+function drawNet() {
+  if (!$('netChk').checked || !graph) { setData('net', []); return; }
+  const g = graph, f = [];
+  g.ways.forEach(w => {
+    let k = w.k;
+    if (k !== 'ng' && g.comp[w.n[0]] !== g.main) k = 'iso';
+    f.push({type:'Feature', properties:{k}, geometry:{type:'LineString', coordinates: w.n.map(i => [g.lon[i], g.lat[i]])}});
+  });
+  setData('net', f);
+}
 function snap(g, p) {
   let bi = -1, bd = 1e12;
   for (let i = 0; i < g.lon.length; i++) {
@@ -241,7 +400,7 @@ function snap(g, p) {
   return {i: bi, d: bd};
 }
 
-// ---------- 経路計算（A*法：ダイクストラ法に「目的地への近さ」の見込みを足した高速版） ----------
+// ---------- 経路計算（A*法） ----------
 class Heap {
   constructor() { this.a = []; }
   get size() { return this.a.length; }
@@ -288,7 +447,8 @@ async function calc() {
   if (busy) { pending = true; return; }
   if (!pos) { showErr('現在地がまだ取得できていません。少し待ってから「再計算」を押してください。'); return; }
   if (!dest) return;
-  const straight = distM(pos, dest);
+  const from = pos.slice(), pts = [from].concat(via ? [via] : [], [dest]);
+  const straight = distM(from, dest);
   if (straight > MAX_M) {
     clearRoute();
     $('rem').textContent = '徒歩の範囲を超えています';
@@ -297,31 +457,35 @@ async function calc() {
   }
   busy = true;
   try {
-    const from = pos.slice(), need = bboxOf(from, dest, MARGIN);
-    if (!graph || !inside(need, graph.bb)) {
+    if (!graph || !inside(bboxOf(pts, MARGIN), graph.bb)) {
       status('道のデータを取得中…（数秒〜数十秒かかります）'); await pause();
-      const bb = bboxOf(from, dest, MARGIN + 500);
+      const bb = bboxOf(pts, MARGIN + 500);
       const els = await fetchOverpass(bb);
       status('道の網を組み立て中…'); await pause();
       graph = buildGraph(els); graph.bb = bb;
+      drawNet();
     }
     status('経路を計算中…'); await pause();
-    const s = snap(graph, from), t = snap(graph, dest);
-    if (s.i < 0 || t.i < 0) throw new Error('近くに歩ける道が見つかりません');
-    const path = astar(graph, s.i, t.i);
-    if (!path) throw new Error('ルートが見つかりませんでした');
+    const sn = pts.map(p => snap(graph, p));
+    if (sn.some(s => s.i < 0)) throw new Error('近くに歩ける道が見つかりません');
+    let path = [];
+    for (let k = 0; k < sn.length - 1; k++) {
+      const seg = astar(graph, sn[k].i, sn[k + 1].i);
+      if (!seg) throw new Error('ルートが見つかりませんでした');
+      path = path.concat(k ? seg.slice(1) : seg);
+    }
     const coords = [from].concat(path, [dest]), cum = [0];
     for (let i = 1; i < coords.length; i++) cum.push(cum[i - 1] + distM(coords[i - 1], coords[i]));
-    route = {coords, cum, off: 0};
+    route = {coords, cum, pts, off: 0};
     setData('route', line(coords));
     const b = new mapboxgl.LngLatBounds(); coords.forEach(c => b.extend(c));
     setFollow(false); map.fitBounds(b, {padding: 50, maxZoom: 17});
     cmpText = ''; cmpCoords = null; setData('cmp', []);
     updateRemain();
-    if ($('cmpChk').checked) fetchCmp(from);
+    if ($('cmpChk').checked) fetchCmp(pts);
     let msg = '計算完了 ' + new Date().toLocaleTimeString('ja-JP', {hour:'2-digit', minute:'2-digit'})
       + `（道の点 ${graph.lon.length.toLocaleString()}件）`;
-    if (s.d > 200) msg += `　※現在地から最寄りの道まで${fmtDist(s.d)}あります`;
+    if (sn[0].d > 200) msg += `　※現在地から最寄りの道まで${fmtDist(sn[0].d)}あります`;
     status(msg);
   } catch (e) { showErr(e.message); status(''); }
   finally {
@@ -331,9 +495,9 @@ async function calc() {
 }
 
 // ---------- 比較用：Mapboxの徒歩ルート ----------
-async function fetchCmp(from) {
+async function fetchCmp(pts) {
   try {
-    const c = [from, dest].map(p => p[0].toFixed(6) + ',' + p[1].toFixed(6)).join(';');
+    const c = pts.map(p => p[0].toFixed(6) + ',' + p[1].toFixed(6)).join(';');
     const res = await fetch(`https://api.mapbox.com/directions/v5/mapbox/walking/${c}?geometries=geojson&overview=full&access_token=${TOKEN}`);
     const j = await res.json();
     if (!res.ok || j.code !== 'Ok' || !j.routes.length) throw new Error(`HTTP ${res.status} ${j.code || ''} ${j.message || ''}`);
@@ -360,7 +524,7 @@ function updateRemain() {
 function showSummary() {
   if (!route) return;
   const total = route.cum[route.cum.length - 1];
-  let h = `全長 ${fmtDist(total)}・約${mins(total)}分（分速80m）`;
+  let h = `全長 ${fmtDist(total)}・約${mins(total)}分（分速80m）${via ? '　経由地あり' : ''}`;
   if (cmpText) h += '<br>' + cmpText;
   if (route.off > 60) h += '<br><span style="color:#c0392b">ルートから離れています。必要なら「再計算」を押してください</span>';
   $('sub').innerHTML = h;
