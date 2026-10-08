@@ -25,17 +25,33 @@ input[type=checkbox]{padding:0;margin:0 4px 0 0}
 .row{font-size:14px;color:#333}
 .fav{background:#fff3cd;border:1px solid #e0a800;border-radius:14px;padding:4px 12px}
 details{margin:8px 0;background:#fff;border:1px solid #ddd;border-radius:6px;padding:6px}
+#walkBtn{background:#1f6fd1;color:#fff;border:none;border-radius:6px;font-weight:bold}
+#result{font-size:14px;color:#1f3a93;margin:4px 0}
 .me{width:34px;height:34px;position:relative}
 .me .dot{position:absolute;left:8px;top:8px;width:18px;height:18px;border-radius:50%;background:#1e90ff;border:3px solid #fff;box-shadow:0 0 6px rgba(0,0,0,.5)}
 .me .arw{position:absolute;left:11px;top:0;width:0;height:0;border-left:6px solid transparent;border-right:6px solid transparent;border-bottom:10px solid #1e90ff;display:none}
 .lg{display:inline-block;width:14px;height:4px;vertical-align:middle;margin:0 2px 0 6px}
+/* 歩行中の画面 */
+#hud{position:absolute;top:8px;left:8px;z-index:5;display:none;background:rgba(255,255,255,.9);border-radius:8px;padding:6px 10px;box-shadow:0 1px 4px rgba(0,0,0,.3);line-height:1.4;font-size:14px}
+#hud .big{font-size:20px;font-weight:bold}
+#tab{position:absolute;left:0;right:0;bottom:0;height:52px;display:none;z-index:6;background:#fafafa;border-top:1px solid #ccc;align-items:center;justify-content:center;gap:16px}
+body.walking #hud{display:block}
+body.walking #tab{display:flex}
+body.walking #map{height:auto;bottom:52px;right:0}
+body.walking #panel{display:none}
+body.walking.menu #map{bottom:auto;height:50%}
+body.walking.menu #panel{display:block;top:50%;bottom:52px;left:0;right:0;width:auto;border-left:none;border-top:1px solid #ccc}
 </style>
 </head>
 <body>
 <div id="map"></div>
+<div id="hud"></div>
+<div id="tab"><button id="menuBtn">▲メニュー</button><button id="endBtn">終了</button></div>
 <div id="panel">
   <div id="rem">目的地を設定してください</div>
   <div id="sub"></div>
+  <div id="result"></div>
+  <div><button id="walkBtn" disabled>歩き始める</button></div>
   <div><input id="search" placeholder="目的地（駅名・施設名・住所）"><button id="searchBtn">検索</button></div>
   <div id="hits"></div>
   <div id="favBar"></div>
@@ -58,6 +74,10 @@ details{margin:8px 0;background:#fff;border:1px solid #ddd;border-radius:6px;pad
     <div class="small">端末間で移すとき：書き出し → 文字をコピー → 別の端末に貼って読み込み</div>
     <textarea id="favText" rows="3" style="width:100%"></textarea>
     <button id="favExport">書き出し</button><button id="favImport">読み込み</button>
+  </details>
+  <details>
+    <summary>設定</summary>
+    <div class="row">体重：<input id="weight" type="number" min="20" max="200" step="0.5" style="width:90px">kg（カロリー計算用。この端末の中にだけ保存）</div>
   </details>
   <div class="small">道路・名称検索データ © OpenStreetMap contributors</div>
 </div>
@@ -83,16 +103,20 @@ map.addControl(new mapboxgl.NavigationControl(), 'top-right');
 const $ = id => document.getElementById(id);
 let pos = null, posMarker = null, arw = null, dest = null, destMarker = null, destName = '', via = null, viaMarker = null;
 let pickMode = null, follow = true, busy = false, pending = false, mode = 'to';
-let graph = null, route = null, cands = [], candIdx = 0, cmpCoords = null, cmpText = '';
+let graph = null, route = null, cands = [], candIdx = 0, cmpCoords = null, cmpText = '', lastRemain = null;
 let headingUp = false, heading = null, hx = 0, hy = 0, lastCompass = 0, lastCam = 0;
+let walk = null, hudTimer = null;
 const errs = [];
-let favs = [];
-try { favs = JSON.parse(localStorage.getItem('walk_favs') || '[]'); } catch (e) { favs = []; }
+function loadJSON(k, d) { try { return JSON.parse(localStorage.getItem(k) || d); } catch (e) { return JSON.parse(d); } }
+let favs = loadJSON('walk_favs', '[]');
+let tracks = loadJSON('walk_tracks', '[]');
+$('weight').value = localStorage.getItem('walk_weight') || '60';
+$('weight').onchange = () => { try { localStorage.setItem('walk_weight', $('weight').value); } catch (e) {} };
+const weight = () => { const w = Number($('weight').value); return w > 0 ? w : 60; };
 
 // ---------- 共通 ----------
 function showErr(m) {
-  const t = new Date().toLocaleTimeString('ja-JP', {hour:'2-digit', minute:'2-digit'});
-  errs.unshift(t + ' ' + m); errs.length = Math.min(errs.length, 3);
+  errs.unshift(nowHM() + ' ' + m); errs.length = Math.min(errs.length, 3);
   $('err').innerHTML = errs.map(x => `<div>${esc(x)}</div>`).join('');
 }
 const esc = s => String(s).replace(/[&<>"']/g, c => ({'&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;', "'":'&#39;'}[c]));
@@ -102,7 +126,9 @@ function setData(id, f) { const s = map.getSource(id); if (s) s.setData({type:'F
 const line = c => [{type:'Feature', properties:{}, geometry:{type:'LineString', coordinates:c}}];
 function fmtDist(m) { return m >= 1000 ? (m / 1000).toFixed(1) + 'km' : Math.round(m / 10) * 10 + 'm'; }
 const mins = m => Math.max(1, Math.round(m / SPEED));
-const nowHM = () => new Date().toLocaleTimeString('ja-JP', {hour:'2-digit', minute:'2-digit'});
+const hm = d => d.toLocaleTimeString('ja-JP', {hour:'2-digit', minute:'2-digit'});
+const nowHM = () => hm(new Date());
+function fmtTime(sec) { const h = Math.floor(sec / 3600), m = Math.floor(sec % 3600 / 60); return h ? `${h}時間${String(m).padStart(2, '0')}分` : `${m}分`; }
 
 // ---------- 距離・方角の計算 ----------
 function distM(a, b) {
@@ -151,7 +177,6 @@ map.on('load', () => {
     paint:{'line-color':'#fff', 'line-width':9}});
   map.addLayer({id:'route', type:'line', source:'route', layout:{'line-cap':'round', 'line-join':'round'},
     paint:{'line-color':'#1f6fd1', 'line-width':5}});
-  // 進む向きの矢印
   const cv = document.createElement('canvas'); cv.width = cv.height = 24;
   const cx = cv.getContext('2d');
   cx.fillStyle = '#fff'; cx.strokeStyle = '#1f6fd1'; cx.lineWidth = 2;
@@ -232,6 +257,7 @@ function onPos(p) {
     if (!dest) status('目的地を検索するか、「地図で指定」を押して地図をタップしてください。');
   } else posMarker.setLngLat(pos);
   if (Date.now() - lastCompass > 3000 && c.heading != null && !isNaN(c.heading) && c.speed > 0.7) feedHeading(c.heading, 0.5);
+  if (walk) walkStep(c);
   cam();
   updateRemain();
 }
@@ -239,6 +265,93 @@ document.addEventListener('visibilitychange', () => {
   if (document.visibilityState === 'visible' && 'geolocation' in navigator)
     navigator.geolocation.getCurrentPosition(onPos, () => {}, {enableHighAccuracy: true, maximumAge: 0, timeout: 15000});
 });
+
+// ---------- 歩行中の記録（距離・速度・カロリー） ----------
+// 速度(km/h)ごとの運動の強さ（METs）。間は直線で補う
+const METS = [[1.5, 1.3], [3.2, 2.8], [4.0, 3.0], [4.8, 3.5], [5.6, 4.3], [6.4, 5.0], [7.2, 7.0]];
+function mets(kmh) {
+  if (kmh <= METS[0][0]) return METS[0][1];
+  for (let i = 1; i < METS.length; i++) if (kmh <= METS[i][0]) {
+    const [a, x] = METS[i - 1], [b, y] = METS[i];
+    return x + (y - x) * (kmh - a) / (b - a);
+  }
+  return METS[METS.length - 1][1];
+}
+const roundP = p => [Number(p[0].toFixed(6)), Number(p[1].toFixed(6))];
+function saveTracks() {
+  try { localStorage.setItem('walk_tracks', JSON.stringify(tracks)); }
+  catch (e) { showErr('歩いた記録の保存に失敗しました（容量不足の可能性）'); }
+}
+function walkStep(c) {
+  const now = Date.now(), p = [c.longitude, c.latitude];
+  if (c.accuracy <= 50) {
+    if (!walk.last) { walk.last = {p, t: now}; walk.track.pts.push(roundP(p)); }
+    else {
+      const d = distM(walk.last.p, p), dt = (now - walk.last.t) / 1000;
+      // 立ち止まっているときのGPSの揺れを距離に数えないよう、一定以上動いたときだけ足す
+      if (d >= Math.max(8, c.accuracy * 0.5)) {
+        const v = d / Math.max(dt, 1);
+        if (v <= 4) { // 時速14km超は乗り物か位置の飛びとみなして足さない
+          walk.dist += d;
+          walk.kcal += mets(v * 3.6) * weight() * dt / 3600 * 1.05;
+          walk.track.pts.push(roundP(p));
+        }
+        walk.last = {p, t: now};
+      }
+    }
+  }
+  walk.hist.push({t: now, d: walk.dist});
+  while (walk.hist.length && walk.hist[0].t < now - 120000) walk.hist.shift();
+  renderHud();
+}
+function renderHud() {
+  if (!walk) return;
+  const now = Date.now(), el = (now - walk.t0) / 1000;
+  // 今の速度：直近1分の平均
+  let v = null;
+  const e = walk.hist.find(x => x.t >= now - 60000);
+  if (e && now - e.t >= 15000) v = (walk.dist - e.d) / ((now - e.t) / 1000);
+  else if (!e && el > 60) v = 0;
+  // 到着予定：歩き始めてからの平均ペース（最初の2分は分速80m）
+  const pace = (el < 120 || walk.dist < 100) ? SPEED / 60 : Math.max(0.3, walk.dist / el);
+  let top = '';
+  if (lastRemain === null) top = '<div class="big">ルートなし</div>';
+  else if (lastRemain < 20) top = `<div class="big">${route && route.loop ? '出発点に戻りました' : '到着しました'}</div>`;
+  else top = `<div class="big">残り ${fmtDist(lastRemain)}</div><div class="big">到着 ${hm(new Date(now + lastRemain / pace * 1000))}</div>`;
+  $('hud').innerHTML = top +
+    `<div>${v === null ? '—' : (v * 3.6).toFixed(1)} km/h　${Math.round(walk.kcal)} kcal</div>` +
+    `<div class="small" style="margin:0">歩行 ${fmtTime(el)}・${fmtDist(walk.dist)}</div>`;
+}
+function resizeSoon() { setTimeout(() => map.resize(), 60); }
+$('walkBtn').onclick = () => {
+  if (!route) return;
+  walk = {t0: Date.now(), dist: 0, kcal: 0, last: null, hist: [], track: {t0: Date.now(), pts: []}};
+  tracks.push(walk.track);
+  document.body.classList.add('walking'); document.body.classList.remove('menu');
+  $('menuBtn').textContent = '▲メニュー';
+  $('result').textContent = '';
+  resizeSoon(); setFollow(true);
+  clearInterval(hudTimer);
+  let n = 0;
+  hudTimer = setInterval(() => { renderHud(); if (++n % 12 === 0) saveTracks(); }, 5000);
+  renderHud();
+};
+$('menuBtn').onclick = () => {
+  const open = document.body.classList.toggle('menu');
+  $('menuBtn').textContent = open ? '▼閉じる' : '▲メニュー';
+  resizeSoon();
+};
+$('endBtn').onclick = () => {
+  if (!walk) return;
+  const el = (Date.now() - walk.t0) / 1000;
+  const avg = el > 0 ? walk.dist / el * 3.6 : 0;
+  $('result').textContent = `今回の歩行：${fmtTime(el)}・${fmtDist(walk.dist)}・平均${avg.toFixed(1)}km/h・${Math.round(walk.kcal)}kcal`;
+  if (walk.track.pts.length < 2) tracks = tracks.filter(t => t !== walk.track);
+  saveTracks();
+  clearInterval(hudTimer); walk = null;
+  document.body.classList.remove('walking', 'menu');
+  resizeSoon();
+};
 
 // ---------- 検索（名称：OpenStreetMap／住所：Mapbox） ----------
 $('searchBtn').onclick = doSearch;
@@ -460,7 +573,6 @@ class Heap {
     return top;
   }
 }
-// 道の点の番号の並びを返す
 function astar(g, s, t) {
   const n = g.lon.length, d = new Float64Array(n).fill(Infinity), prev = new Int32Array(n).fill(-1), done = new Uint8Array(n);
   const tp = [g.lon[t], g.lat[t]], h = i => distM([g.lon[i], g.lat[i]], tp);
@@ -485,7 +597,6 @@ function pathLen(g, idx) {
   for (let i = 1; i < idx.length; i++) L += distM([g.lon[idx[i - 1]], g.lat[idx[i - 1]]], [g.lon[idx[i]], g.lat[idx[i]]]);
   return L;
 }
-// いくつかの点を順に結ぶ
 function legsPath(g, nodes) {
   let p = [];
   for (let k = 0; k < nodes.length - 1; k++) {
@@ -497,7 +608,6 @@ function legsPath(g, nodes) {
 }
 const edgeKey = (a, b) => a < b ? a + '_' + b : b + '_' + a;
 function edgeSet(idx) { const s = new Set(); for (let i = 1; i < idx.length; i++) s.add(edgeKey(idx[i - 1], idx[i])); return s; }
-// 同じ道を2回通る割合（行って戻る道を避けるため）
 function overlapRatio(g, idx) {
   const seen = new Set(); let dup = 0, L = 0;
   for (let i = 1; i < idx.length; i++) {
@@ -507,7 +617,6 @@ function overlapRatio(g, idx) {
   }
   return L ? dup / L : 0;
 }
-// 目標の長さに近い順に、似ていない案を最大3つ選ぶ
 function pickBest(list, tol) {
   list = list.filter(c => c.err <= tol).sort((a, b) => a.err - b.err);
   const out = [];
@@ -525,7 +634,8 @@ function pickBest(list, tol) {
 
 // ---------- ルートを出す ----------
 function clearRoute() {
-  route = null; cands = []; candIdx = 0; $('altBtn').disabled = true;
+  route = null; cands = []; candIdx = 0; lastRemain = null;
+  $('altBtn').disabled = true; $('walkBtn').disabled = true;
   cmpCoords = null; cmpText = ''; setData('route', []); setData('cmp', []); $('sub').innerHTML = '';
 }
 async function calc(m) {
@@ -541,7 +651,6 @@ async function calc(m) {
     if (pending) { pending = false; calc(); }
   }
 }
-// 目的地へ（延長つき）
 async function calcTo() {
   const from = pos.slice(), straight = distM(from, dest);
   if (straight > MAX_M) {
@@ -576,7 +685,6 @@ async function calcTo() {
   if (sn[0].d > 200) msg += `　※現在地から最寄りの道まで${fmtDist(sn[0].d)}あります`;
   status(`計算完了 ${nowHM()}（道の点 ${g.lon.length.toLocaleString()}件）${msg}`);
 }
-// 最短ルートの中ほどから左右に経由地を置いて、遠回りの候補を作る
 function extendCands(g, base, S, X, s, t) {
   const c = toCoords(g, base), cum = cumOf(c), target = S + X;
   const h0 = Math.sqrt(Math.max(0, (target / 2) ** 2 - (S / 2) ** 2)) / 1.2;
@@ -590,12 +698,10 @@ function extendCands(g, base, S, X, s, t) {
     const sv = snap(g, v); if (sv.i < 0) continue;
     const idx = legsPath(g, [s, sv.i, t]); if (!idx) continue;
     if (overlapRatio(g, idx) > 0.2) continue;
-    const L = pathLen(g, idx);
-    out.push({idx, err: Math.abs(L - target)});
+    out.push({idx, err: Math.abs(pathLen(g, idx) - target)});
   }
   return pickBest(out, Math.max(200, X * 0.4));
 }
-// 周回コース（現在地 → 2つの点 → 現在地 の三角形）
 async function calcLoop() {
   const T = Number($('loopKm').value) * 1000, from = pos.slice();
   const r = T / (3 * 1.25);
@@ -626,8 +732,10 @@ function showRoute() {
   const c = cands[candIdx];
   route = {coords: c.coords, cum: cumOf(c.coords), pts: c.pts, baseTotal: c.baseTotal, loop: c.loop, off: 0, prog: 0};
   setData('route', line(c.coords));
+  $('walkBtn').disabled = false;
   const b = new mapboxgl.LngLatBounds(); c.coords.forEach(p => b.extend(p));
-  setFollow(false); map.fitBounds(b, {padding: 50, maxZoom: 17});
+  if (walk) setFollow(true);
+  else { setFollow(false); map.fitBounds(b, {padding: 50, maxZoom: 17}); }
   updateRemain();
 }
 
@@ -651,7 +759,6 @@ function updateRemain() {
   const c = route.coords, total = route.cum[route.cum.length - 1];
   let remain = total;
   if (pos) {
-    // 歩いた分より先の区間だけを探す（周回コースで出発点と到着点が重なっても混乱しないように）
     let best = {d: 1e12, i: 0, t: 0};
     for (let i = Math.max(0, route.prog - 2); i < c.length - 1; i++) {
       const s = segDist(pos, c[i], c[i + 1]);
@@ -662,8 +769,10 @@ function updateRemain() {
     const a = route.cum[best.i] + best.t * (route.cum[best.i + 1] - route.cum[best.i]);
     remain = Math.max(0, total - a);
   }
+  lastRemain = remain;
   $('rem').textContent = remain < 20 ? (route.loop ? '出発点に戻りました' : '目的地付近です') : `残り ${fmtDist(remain)}　約${mins(remain)}分`;
   showSummary();
+  renderHud();
 }
 function showSummary() {
   if (!route) return;
