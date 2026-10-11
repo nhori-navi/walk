@@ -62,6 +62,7 @@ body.walking.menu #panel{display:block;top:50%;bottom:52px;left:0;right:0;width:
   <div id="sub"></div>
   <canvas id="prof"></canvas>
   <div id="result"></div>
+  <div id="today" class="row" style="font-weight:bold;color:#1e7e34"></div>
   <div><button id="walkBtn">記録だけ始める</button></div>
   <div><input id="search" placeholder="目的地（駅名・施設名・住所）"><button id="searchBtn">検索</button></div>
   <div id="hits"></div>
@@ -89,7 +90,7 @@ body.walking.menu #panel{display:block;top:50%;bottom:52px;left:0;right:0;width:
   <div id="err" class="small" style="color:#c00"></div>
   <details>
     <summary>歩いた記録の管理</summary>
-    <div class="small">OpenTracksのGPXファイル（Download/opentracks）を選んでください（複数可）。同じファイルを読み込み直すと、前回分を置き換えます。書き出したファイル（.json）を選ぶと、記録を復元できます。</div>
+    <div class="small">OpenTracksのGPXファイル（Download/opentracks）を選んでください（複数可）。同じファイルを読み込み直すと、前回分を置き換えます。同じ時間帯にこのアプリで取った記録があれば、そちらは消してOpenTracksの記録を残します。書き出したファイル（.json）を選ぶと、記録を復元できます。</div>
     <input type="file" id="recFile" multiple style="display:none">
     <button id="recImport">記録を読み込む</button><button id="recExport">記録を書き出す</button><br>
     <button id="recClear">記録をすべて消す</button>
@@ -109,6 +110,7 @@ body.walking.menu #panel{display:block;top:50%;bottom:52px;left:0;right:0;width:
     <button id="netReset">道のデータを取り直す</button>
     <div class="row"><label><input type="checkbox" id="vibChk">曲がり角の手前で振動する（Androidのみ）</label> <button id="vibTest">振動テスト</button></div>
     <div id="vibMsg" class="small"></div>
+    <div class="row"><label><input type="checkbox" id="offChk">道から30m以上外れた記録も薄く表示する（灰色の点線。距離や今日の合計には入れていません）</label></div>
     <div class="row"><label><input type="checkbox" id="autoFollowChk">歩行中、地図を触ってから20秒たったら現在地の追従に戻す</label></div>
   </details>
   <div class="small">道路・名称検索データ © OpenStreetMap contributors／標高：国土地理院（標高タイル）<br>MichiMiru（徒歩ナビ）　<span id="ver"></span></div>
@@ -121,11 +123,11 @@ window.addEventListener('error', e => {
   if (el) el.textContent = el.textContent ? el.textContent + ' ／ ' + m : m;
 }, true);
 </script>
-<script src="config.js?v=2"></script>
-<script src="base.js?v=2"></script>
-<script src="road.js?v=2"></script>
-<script src="poi.js?v=2"></script>
-<script src="walk.js?v=2"></script>
-<script src="app.js?v=2"></script>
+<script src="config.js?v=3"></script>
+<script src="base.js?v=3"></script>
+<script src="road.js?v=3"></script>
+<script src="poi.js?v=3"></script>
+<script src="walk.js?v=3"></script>
+<script src="app.js?v=3"></script>
 </body>
 </html>
