@@ -9,8 +9,11 @@ map.addControl(new mapboxgl.NavigationControl(), 'top-right');
 // ---------- 地図の準備 ----------
 map.on('load', () => {
   const empty = {type:'FeatureCollection', features:[]};
-  ['walked', 'veh', 'net', 'cmp', 'route', 'poi'].forEach(id => map.addSource(id, {type:'geojson', data:empty}));
+    ['off', 'walked', 'veh', 'net', 'cmp', 'route', 'poi'].forEach(id => map.addSource(id, {type:'geojson', data:empty}));
+  map.addLayer({id:'off', type:'line', source:'off',
+    paint:{'line-color':'#888', 'line-width':2.5, 'line-dasharray':[1, 2], 'line-opacity':0.7}});
   map.addLayer({id:'walked', type:'line', source:'walked', layout:{'line-cap':'round', 'line-join':'round'},
+    paint:{'line-color':'#2ecc71', 'line-width':['interpolate', ['linear'], ['zoom'], 12, 3, 17, 10], 'line-opacity':0.55}});
     paint:{'line-color':'#2ecc71', 'line-width':['interpolate', ['linear'], ['zoom'], 12, 3, 17, 10], 'line-opacity':0.55}});
   map.addLayer({id:'veh', type:'line', source:'veh', layout:{'line-cap':'round', 'line-join':'round'},
     paint:{'line-color':'#e74c3c', 'line-width':['interpolate', ['linear'], ['zoom'], 10, 2, 16, 6], 'line-opacity':0.6}});
