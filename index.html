@@ -42,6 +42,7 @@ details{margin:8px 0;background:#fff;border:1px solid #ddd;border-radius:6px;pad
 #lock{position:fixed;inset:0;z-index:30;display:none;background:rgba(0,0,0,.08);touch-action:none}
 #lockBadge{position:absolute;left:50%;top:45%;transform:translate(-50%,-50%);white-space:nowrap;background:rgba(0,0,0,.75);color:#fff;border-radius:24px;padding:12px 20px;font-size:15px;user-select:none;-webkit-user-select:none;overflow:hidden}
 #lockBar{position:absolute;left:0;bottom:0;height:4px;width:0;background:#2ecc71}
+.pmk{background:#fff;border:2px solid #555;border-radius:12px;padding:1px 6px;font-size:12px;font-weight:bold;white-space:nowrap;box-shadow:0 1px 3px rgba(0,0,0,.4)}
 .vmk{width:24px;height:24px;border-radius:50%;background:#555;color:#fff;border:2px solid #fff;font-size:13px;font-weight:bold;text-align:center;line-height:20px;box-shadow:0 1px 3px rgba(0,0,0,.5)}
 body.walking #hud{display:block}
 body.walking #tab{display:flex}
@@ -67,17 +68,21 @@ body.walking.menu #panel{display:block;top:50%;bottom:52px;left:0;right:0;width:
   <div id="favBar"></div>
   <div id="favForm" class="row">名前：<input id="favName" style="width:50%"><button id="favSave">保存</button><button id="favCancel">やめる</button></div>
   <div><button id="pickBtn">地図で指定</button><button id="viaBtn">経由地を追加</button><button id="viaUndo" disabled>1つ戻す</button><button id="viaClear" disabled>全部消す</button></div>
-  <div><button id="recalcBtn" disabled>再計算</button><button id="followBtn">追従：ON</button><button id="headBtn">向き：北が上</button><button id="favAdd" disabled>★登録</button></div>
+  <div><button id="recalcBtn" disabled>再計算</button><button id="followBtn">追従：ON</button><button id="headBtn">向き：北が上</button><button id="favAdd" disabled>★登録</button><button id="routeClear">ルートを消す</button></div>
   <div class="row">延長：<select id="ext">
       <option value="0">なし</option><option value="300">＋300m</option><option value="500">＋500m</option>
       <option value="1000">＋1km</option><option value="2000">＋2km</option></select>
     未踏破を優先：<select id="unexp"><option value="1">なし</option><option value="1.3">弱</option><option value="1.6">強</option><option value="3">最強</option></select>
     <button id="altBtn" disabled>別の案</button></div>
   <div class="row">坂：<select id="slope"><option value="0">気にしない</option><option value="1">なるべく避ける（階段も）</option><option value="2">あえて選ぶ</option></select></div>
+  <div class="row">寄り道：<label><input type="checkbox" id="poiShrine">⛩神社</label>　<label><input type="checkbox" id="poiTemple">卍寺</label>　<label><input type="checkbox" id="poiPark">🌳公園</label>
+    数：<select id="poiN"><option>1</option><option>2</option><option>3</option></select></div>
+  <div class="row">遊歩道を優先：<select id="foot"><option value="0">なし</option><option value="1">弱</option><option value="2">強</option></select></div>
   <div class="row">周回：<select id="loopKm"><option>1</option><option>2</option><option selected>3</option><option>5</option></select>km
     <button id="loopBtn">周回コースを作る</button></div>
   <div class="small"><label><input type="checkbox" id="walkedChk" checked>歩いた道（緑）</label>　<label><input type="checkbox" id="vehChk">乗り物の区間（赤）</label></div>
   <div class="small"><label><input type="checkbox" id="cmpChk" checked>比較用にMapboxの徒歩ルートを表示（点線）</label></div>
+  <div class="small"><label><input type="checkbox" id="poiShow">地図に神社・寺・公園を表示（印をタップすると名前）</label></div>
   <div class="small"><label><input type="checkbox" id="netChk">道のデータを表示</label><br>
     <span class="lg" style="background:#8a9a9a"></span>通れる道<span class="lg" style="background:#f39c12"></span>階段<span class="lg" style="background:#9b59b6"></span>つながっていない道<span class="lg" style="background:#e74c3c"></span>通行不可の印</div>
   <div id="status" class="small">現在地を取得中…</div>
@@ -122,6 +127,9 @@ const CACHE_DAYS = 30, CACHE_MAX = 10; // 道のデータの保存日数と保�
 const OVERPASS = ['https://overpass-api.de/api/interpreter', 'https://overpass.kumi.systems/api/interpreter'];
 const HW = '^(footway|path|pedestrian|steps|corridor|living_street|residential|service|unclassified|road|track|cycleway|tertiary|tertiary_link|secondary|secondary_link|primary|primary_link|trunk|trunk_link)$';
 const NET_COLOR = {ok:'#8a9a9a', steps:'#f39c12', iso:'#9b59b6', ng:'#e74c3c'};
+// 遊歩道を優先するときの重み（[歩行者の道, 住宅街などの道, 大きな道]の順。なし／弱／強）
+const FOOT_F = [[1, 1, 1], [1, 1.1, 1.3], [1, 1.25, 1.6]];
+const POI = {shrine: {ic: '⛩', nm: '神社', col: '#c0392b'}, temple: {ic: '卍', nm: '寺', col: '#8e44ad'}, park: {ic: '🌳', nm: '公園', col: '#27ae60'}};
 
 mapboxgl.accessToken = TOKEN;
 const map = new mapboxgl.Map({
@@ -131,7 +139,7 @@ const map = new mapboxgl.Map({
 map.addControl(new mapboxgl.NavigationControl(), 'top-right');
 
 const $ = id => document.getElementById(id);
-let pos = null, posMarker = null, arw = null, dest = null, destMarker = null, destName = '', vias = [], viaMarkers = [], loopStart = null;
+let pos = null, posMarker = null, arw = null, dest = null, destMarker = null, destName = '', vias = [], viaMarkers = [], loopStart = null, poiMarkers = [];
 let pickMode = null, follow = true, busy = false, pending = false, mode = 'to';
 let graph = null, route = null, cands = [], candIdx = 0, cmpCoords = null, cmpText = '', lastRemain = null;
 let headingUp = false, heading = null, hx = 0, hy = 0, lastCompass = 0, lastCam = 0;
@@ -413,7 +421,7 @@ window.addEventListener('resize', () => { if (route) drawProf(route.a); });
 // ---------- 地図の準備 ----------
 map.on('load', () => {
   const empty = {type:'FeatureCollection', features:[]};
-  ['walked', 'veh', 'net', 'cmp', 'route'].forEach(id => map.addSource(id, {type:'geojson', data:empty}));
+  ['walked', 'veh', 'net', 'cmp', 'route', 'poi'].forEach(id => map.addSource(id, {type:'geojson', data:empty}));
   map.addLayer({id:'walked', type:'line', source:'walked', layout:{'line-cap':'round', 'line-join':'round'},
     paint:{'line-color':'#2ecc71', 'line-width':['interpolate', ['linear'], ['zoom'], 12, 3, 17, 10], 'line-opacity':0.55}});
   map.addLayer({id:'veh', type:'line', source:'veh', layout:{'line-cap':'round', 'line-join':'round'},
@@ -435,9 +443,17 @@ map.on('load', () => {
   map.addLayer({id:'routeArrow', type:'symbol', source:'route', layout:{
     'symbol-placement':'line', 'symbol-spacing':80, 'icon-image':'arrow',
     'icon-allow-overlap':true, 'icon-rotation-alignment':'map'}});
+  map.addLayer({id:'poi', type:'circle', source:'poi', paint:{
+    'circle-radius':6, 'circle-color':['match', ['get', 'k'], 'shrine', POI.shrine.col, 'temple', POI.temple.col, POI.park.col],
+    'circle-stroke-color':'#fff', 'circle-stroke-width':2}});
+  map.on('click', 'poi', e => {
+    if (pickMode || !e.features.length) return;
+    const f = e.features[0];
+    new mapboxgl.Popup({closeButton: false}).setLngLat(f.geometry.coordinates).setText(f.properties.t).addTo(map);
+  });
   if (route) setData('route', line(route.coords));
   if (cmpCoords) setData('cmp', line(cmpCoords));
-  drawNet(); drawTracks();
+  drawNet(); drawTracks(); drawPois();
 });
 map.on('error', e => showErr('地図エラー：' + (e.error && e.error.message ? e.error.message : '不明')));
 map.on('dragstart', () => { setFollow(false); touchedMap(); });
@@ -579,6 +595,7 @@ function nextTurn() {
 function turnText(t) {
   if (t.kind === 'steps') return {ar: t.up === true ? '⤴' : t.up === false ? '⤵' : '⇅', tx: '階段' + (t.up === true ? '（上り）' : t.up === false ? '（下り）' : '')};
   if (t.kind === 'slope') return {ar: '⤴', tx: '急な上り坂'};
+  if (t.kind === 'poi') return {ar: '', tx: t.label};
   const a = Math.abs(t.ang), L = t.ang < 0;
   if (a < 60) return {ar: L ? '↖' : '↗', tx: L ? '斜め左へ' : '斜め右へ'};
   if (a < 150) return {ar: L ? '↰' : '↱', tx: L ? '左へ' : '右へ'};
@@ -966,6 +983,24 @@ $('recalcBtn').onclick = () => calc();
 $('ext').onchange = () => { if (dest && mode === 'to') calc('to'); };
 $('unexp').onchange = () => { if (route) calc(); };
 $('slope').onchange = () => { if (route) calc(); };
+$('foot').onchange = () => { if (route) calc(); };
+$('poiN').onchange = () => { if (route && poiKinds().length) calc(); };
+['poiShrine', 'poiTemple', 'poiPark'].forEach(id => $(id).onchange = () => {
+  if (poiKinds().length && mode === 'to' && $('ext').value === '0') { $('ext').value = '500'; status('寄り道のため、延長を＋500mにしました（寄り道で遠回りしてよい上限です）'); }
+  if (route) calc();
+});
+$('poiShow').onchange = () => {
+  if ($('poiShow').checked && !graph) status('ルートを一度計算すると、その範囲の神社・寺・公園が表示されます。');
+  drawPois();
+};
+$('routeClear').onclick = () => {
+  clearRoute(); clearVia(); loopStart = null; mode = 'to';
+  dest = null; if (destMarker) { destMarker.remove(); destMarker = null; }
+  $('favAdd').disabled = true; $('recalcBtn').disabled = true;
+  $('rem').textContent = '目的地を設定してください';
+  status(walk ? 'ルートを消しました。記録はそのまま続けています。' : 'ルートを消しました。「記録だけ始める」で記録だけできます。');
+  renderHud();
+};
 $('loopBtn').onclick = () => {
   dest = null; clearVia(); loopStart = null;
   if (destMarker) { destMarker.remove(); destMarker = null; }
@@ -1032,9 +1067,12 @@ $('favImport').onclick = () => {
 renderFavs();
 
 // ---------- 道のデータ（OpenStreetMap） ----------
+const bboxStr = bb => [bb.s, bb.w, bb.n, bb.e].map(v => v.toFixed(5)).join(',');
 async function fetchOverpass(bb) {
-  const box = [bb.s, bb.w, bb.n, bb.e].map(v => v.toFixed(5)).join(',');
-  const q = `[out:json][timeout:90];way["highway"~"${HW}"](${box});out body;>;out skel qt;`;
+  try { return await overpass(`[out:json][timeout:90];way["highway"~"${HW}"](${bboxStr(bb)});out body;>;out skel qt;`); }
+  catch (e) { throw new Error('道の' + e.message); }
+}
+async function overpass(q) {
   let last = null;
   for (const url of OVERPASS) {
     try {
@@ -1046,39 +1084,39 @@ async function fetchOverpass(bb) {
       return (await r.json()).elements || [];
     } catch (e) { last = e; }
   }
-  throw new Error('道のデータを取得できませんでした（' + (last && last.name === 'AbortError' ? '時間切れ' : last.message) + '）');
+  throw new Error('データを取得できませんでした（' + (last && last.name === 'AbortError' ? '時間切れ' : last.message) + '）');
 }
 // 必要な範囲の道の網を用意する（保存済みがあればそれを使い、なければ取り寄せて保存）
 async function ensureGraph(need, fetchBB) {
   if (graph && inside(need, graph.bb)) return;
   const now = Date.now(), life = CACHE_DAYS * 864e5;
   const hit = areaMeta.filter(a => inside(need, a.bb) && now - a.t < life).sort((a, b) => b.t - a.t)[0];
-  let els = null, bb = fetchBB, from = '';
+  let els = null, bb = fetchBB, from = '', areaId = null;
   if (hit) {
     try {
       status('保存済みの道のデータを読み込み中…'); await pause();
       els = await cacheGet(hit.id);
-      if (els) { bb = hit.bb; hit.used = now; saveMeta(); from = `保存済みデータ（${Math.floor((now - hit.t) / 864e5)}日前に取得）`; }
+      if (els) { bb = hit.bb; areaId = hit.id; hit.used = now; saveMeta(); from = `保存済みデータ（${Math.floor((now - hit.t) / 864e5)}日前に取得）`; }
     } catch (e) { els = null; }
   }
   if (!els) {
     status('道のデータを取得中…（数秒〜数十秒かかります）'); await pause();
     els = await fetchOverpass(fetchBB); from = '新しく取得';
     try {
-      const id = 'a' + now;
+      const id = 'a' + now; areaId = id;
       await cachePut(id, els);
       areaMeta.push({id, bb: fetchBB, t: now, used: now});
       const drop = areaMeta.filter(a => now - a.t >= life);
       areaMeta = areaMeta.filter(a => now - a.t < life).sort((a, b) => b.used - a.used);
       drop.push(...areaMeta.splice(CACHE_MAX));
       saveMeta();
-      drop.forEach(a => cacheDel(a.id).catch(() => {}));
+      drop.forEach(a => { cacheDel(a.id).catch(() => {}); cacheDel('p' + a.id).catch(() => {}); });
     } catch (e) { /* 保存できなくても計算は続ける */ }
   }
   status('道の網を組み立て中…'); await pause();
-  graph = buildGraph(els); graph.bb = bb; graph.from = from;
+  graph = buildGraph(els); graph.bb = bb; graph.from = from; graph.areaId = areaId;
   markWalked(graph);
-  drawNet();
+  drawNet(); drawPois();
 }
 // 起動直後に、現在地の周りの道のデータを先に用意しておく
 async function prefetch() {
@@ -1106,7 +1144,10 @@ function buildGraph(els) {
     if (e.type !== 'way' || !e.nodes) return;
     const n = e.nodes.map(id => idx.get(id)).filter(i => i !== undefined);
     if (n.length < 2) return;
-    const t = e.tags || {}, ok = walkable(t), stp = t.highway === 'steps';
+    const t = e.tags || {}, ok = walkable(t), stp = t.highway === 'steps', hw = t.highway || '';
+    // 道の種類：0＝歩行者の道（遊歩道・緑道など。車道沿いの歩道は除く）、1＝住宅街などの道、2＝大きな道
+    const cls = /^(footway|path|pedestrian|steps|corridor|track|bridleway)$/.test(hw) && !/^(sidewalk|crossing)$/.test(t.footway || '') ? 0
+      : /^(tertiary|secondary|primary|trunk)/.test(hw) ? 2 : 1;
     // 橋・トンネルの上は地面の高さと違うので、高さを両側からつなぐ対象にする
     const br = (t.bridge && t.bridge !== 'no') || t.tunnel === 'yes';
     n.forEach(i => { if (br) onBridge[i] = 1; else onGround[i] = 1; });
@@ -1115,7 +1156,7 @@ function buildGraph(els) {
     for (let i = 0; i < n.length - 1; i++) {
       const a = n[i], b = n[i + 1];
       if (a === b || emap.has(edgeKey(a, b))) continue;
-      const ed = {a, b, w: distM([lon[a], lat[a]], [lon[b], lat[b]]), k: 0, s: stp ? 1 : 0};
+      const ed = {a, b, w: distM([lon[a], lat[a]], [lon[b], lat[b]]), k: 0, s: stp ? 1 : 0, c: cls};
       edges.push(ed); emap.set(edgeKey(a, b), ed);
       adj[a].push([b, ed]); adj[b].push([a, ed]);
     }
@@ -1218,7 +1259,7 @@ class Heap {
   }
 }
 function astar(g, s, t) {
-  const mult = Number($('unexp').value) || 1, sm = slopeMode(), ele = g.ele || null;
+  const mult = Number($('unexp').value) || 1, sm = slopeMode(), ele = g.ele || null, ff = FOOT_F[Number($('foot').value) || 0];
   const hk = sm === 2 ? 0.6 : 1; // 「あえて選ぶ」は道が軽くなるので、目安の距離も合わせて軽くする
   const n = g.lon.length, d = new Float64Array(n).fill(Infinity), prev = new Int32Array(n).fill(-1), done = new Uint8Array(n);
   const tp = [g.lon[t], g.lat[t]], h = i => distM([g.lon[i], g.lat[i]], tp) * hk;
@@ -1228,7 +1269,7 @@ function astar(g, s, t) {
     if (done[v]) continue; done[v] = 1;
     if (v === t) break;
     for (const [u, e] of g.adj[v]) {
-      let c = e.k ? e.w * mult : e.w;
+      let c = (e.k ? e.w * mult : e.w) * ff[e.c || 0];
       if (sm) c = slopeCost(c, e, ele ? ele[v] : NaN, ele ? ele[u] : NaN, sm);
       const nd = d[v] + c;
       if (nd < d[u]) { d[u] = nd; prev[u] = v; H.push(nd + h(u), u); }
@@ -1328,13 +1369,188 @@ function computeTurns(g, idx, coords, prof) {
   }
   return out.sort((a, b) => a.d - b.d);
 }
+  // ---------- 寄り道（神社・寺・公園） ----------
+const poiKinds = () => [['poiShrine', 'shrine'], ['poiTemple', 'temple'], ['poiPark', 'park']].filter(([id]) => $(id).checked).map(x => x[1]);
+const poiLabel = p => POI[p.kind].ic + (p.name || '名前なしの' + POI[p.kind].nm);
+// 道の網の地点を100m四方のマスに分けて、近い地点をすばやく探せるようにする
+function nearNode(g, p, maxD) {
+  if (!g.grid) {
+    g.grid = new Map(); g.gk = Math.cos(p[1] * Math.PI / 180) * 111320;
+    for (let i = 0; i < g.lon.length; i++) {
+      if (g.comp[i] !== g.main) continue;
+      const k = Math.floor(g.lon[i] * g.gk / 100) + ',' + Math.floor(g.lat[i] * 110540 / 100);
+      let l = g.grid.get(k); if (!l) { l = []; g.grid.set(k, l); } l.push(i);
+    }
+  }
+  const cx = Math.floor(p[0] * g.gk / 100), cy = Math.floor(p[1] * 110540 / 100), R = Math.ceil(maxD / 100);
+  let bi = -1, bd = maxD;
+  for (let dx = -R; dx <= R; dx++) for (let dy = -R; dy <= R; dy++) {
+    const l = g.grid.get((cx + dx) + ',' + (cy + dy)); if (!l) continue;
+    for (const i of l) { const d = distM(p, [g.lon[i], g.lat[i]]); if (d < bd) { bd = d; bi = i; } }
+  }
+  return bi < 0 ? null : bi;
+}
+// 道のデータと同じ範囲の神社・寺・公園を用意する（端末に保存して使い回す）
+function ensurePois(g) {
+  if (!g.poiP) g.poiP = loadPois(g).catch(e => { g.poiP = null; throw e; }); // 同時に呼ばれても取得は1回だけ
+  return g.poiP;
+}
+async function loadPois(g) {
+  let els = null;
+  if (g.areaId) { try { els = await cacheGet('p' + g.areaId); } catch (e) {} }
+  if (!els) {
+    status('神社・寺・公園のデータを取得中…'); await pause();
+    const box = bboxStr(g.bb);
+    els = await overpass(`[out:json][timeout:60];(nwr["amenity"="place_of_worship"]["religion"~"^(shinto|buddhist)$"](${box});nwr["leisure"~"^(park|garden)$"](${box}););out tags center;`);
+    if (g.areaId) { try { await cachePut('p' + g.areaId, els); } catch (e) {} }
+  }
+  const out = [];
+  for (const e of els) {
+    const t = e.tags || {}, c = e.type === 'node' ? [e.lon, e.lat] : e.center ? [e.center.lon, e.center.lat] : null;
+    if (!c || /^(private|no)$/.test(t.access || '')) continue;
+    const kind = t.amenity === 'place_of_worship' ? (t.religion === 'shinto' ? 'shrine' : 'temple') : 'park';
+    const name = t.name || '';
+    if (out.some(o => o.kind === kind && distM(o.p, c) < 60 && (o.name === name || !name || !o.name))) continue; // 同じ場所の重複
+    const node = nearNode(g, c, 150); if (node === null) continue; // 近くに歩ける道がない場所は除く
+    out.push({kind, name, p: c, node});
+  }
+  return out;
+}
+// 行ったことがあるか（最寄りの道を歩いた記録があるか）
+function markVisited(g, pois) { pois.forEach(p => { p.visited = g.adj[p.node].some(([, e]) => e.k) ? 1 : 0; }); }
+const fewerMsg = list => {
+  const N = Number($('poiN').value) || 1, n = Math.max(...list.map(c => c.stops.length));
+  return n < N ? `　※${N}か所は入らなかったので、${n}か所にしました` : '';
+};
+function combos(a, n) {
+  const out = [];
+  (function rec(st, from) { if (st.length === n) { out.push(st.slice()); return; } for (let i = from; i < a.length; i++) { st.push(a[i]); rec(st, i + 1); st.pop(); } })([], 0);
+  return out;
+}
+// 目的地まで：遠回りの上限X以内で寄れる場所を選び、通る順に並べた案を最大3つ
+async function poiRouteTo(g, s, t, from, dest, baseLen, X, kinds) {
+  const pois = (await ensurePois(g)).filter(p => kinds.includes(p.kind));
+  markVisited(g, pois);
+  const N = Number($('poiN').value) || 1, D = distM(from, dest);
+  const k = Math.cos(from[1] * Math.PI / 180) * 111320, m = 110540;
+  const vx = (dest[0] - from[0]) * k, vy = (dest[1] - from[1]) * m, L2 = vx * vx + vy * vy || 1;
+  const cand = pois.map(p => Object.assign({}, p, {
+    est: (distM(from, p.p) + distM(p.p, dest) - D) * 1.2,
+    tt: ((p.p[0] - from[0]) * k * vx + (p.p[1] - from[1]) * m * vy) / L2}))
+    .filter(p => p.est <= X * 1.2).sort((a, b) => (a.visited - b.visited) || (a.est - b.est)).slice(0, 8);
+  if (!cand.length) return [];
+  for (let n = Math.min(N, cand.length); n >= 1; n--) { // 指定の数で見つからなければ、数を減らして探し直す
+    const r = await poiToN(g, s, t, from, dest, baseLen, X, cand, n, D);
+    if (r.length) return r;
+  }
+  return [];
+}
+async function poiToN(g, s, t, from, dest, baseLen, X, cand, n, D) {
+  const list = combos(cand, n).map(cb => {
+    cb.sort((a, b) => a.tt - b.tt);
+    let L = distM(from, cb[0].p); for (let i = 1; i < cb.length; i++) L += distM(cb[i - 1].p, cb[i].p); L += distM(cb[cb.length - 1].p, dest);
+    return {cb, est: (L - D) * 1.2, unv: cb.filter(p => !p.visited).length};
+  }).filter(c => c.est <= X * 1.3).sort((a, b) => (b.unv - a.unv) || (a.est - b.est)).slice(0, 6);
+  const out = [];
+  for (const c of list) {
+    await pause();
+    const idx = legsPath(g, [s, ...c.cb.map(p => p.node), t]); if (!idx) continue;
+    const extra = pathLen(g, idx) - baseLen; if (extra > X * 1.5) continue;
+    out.push({idx, stops: c.cb, err: Math.max(0, extra) + (c.cb.length - c.unv) * X * 0.5});
+  }
+  return pickBest(out, Infinity);
+}
+// 周回：出発点のまわりの場所を結んで、指定の距離に近い輪を作る（1か所のときは補助の点を足して輪にする）
+async function poiRouteLoop(g, s0, from, T, kinds) {
+  const pois = (await ensurePois(g)).filter(p => kinds.includes(p.kind) && distM(from, p.p) >= 50 && distM(from, p.p) <= T / 2.2);
+  markVisited(g, pois);
+  const N = Number($('poiN').value) || 1;
+  const cand = pois.sort((a, b) => (a.visited - b.visited) || (Math.abs(distM(from, a.p) - T / 5) - Math.abs(distM(from, b.p) - T / 5))).slice(0, 8);
+  if (!cand.length) return [];
+  for (let n = Math.min(N, cand.length); n >= 1; n--) { // 指定の数で見つからなければ、数を減らして探し直す
+    const r = await poiLoopN(g, s0, from, T, cand, n);
+    if (r.length) return r;
+  }
+  return [];
+}
+async function poiLoopN(g, s0, from, T, cand, n) {
+  const tours = [];
+  combos(cand, n).forEach(cb => {
+    const brs = cb.map(p => (bearing(from, p.p) + 360) % 360);
+    // 輪が短すぎるときのために、寄り道先のあいだの一番広い方角に補助の点を置く案も作る
+    const opts = [null];
+    if (cb.length === 1) {
+      const rp = distM(from, cb[0].p);
+      [60, -60, 100, -100].forEach(dz => [rp, T / 3.75].forEach(r => opts.push({b: brs[0] + dz, r})));
+    } else {
+      const sb = brs.slice().sort((a, b) => a - b);
+      let gap = 0, mid = 0;
+      sb.forEach((b, i) => { const nb = i + 1 < sb.length ? sb[i + 1] : sb[0] + 360; if (nb - b > gap) { gap = nb - b; mid = b + gap / 2; } });
+      [T / 3.75, T / 3].forEach(r => opts.push({b: mid, r}));
+    }
+    opts.forEach(o => {
+      const stops = cb.map((p, i) => ({p: p.p, b: brs[i], poi: p}));
+      if (o) stops.push({p: offsetPt(from, o.b, o.r), b: (o.b + 360) % 360, aux: true});
+      stops.sort((a, b) => a.b - b.b);
+      const ps = [from, ...stops.map(x => x.p), from];
+      let L = 0; for (let i = 1; i < ps.length; i++) L += distM(ps[i - 1], ps[i]);
+      tours.push({cb: stops.filter(x => x.poi).map(x => x.poi), seq: stops, est: L * 1.25, unv: cb.filter(p => !p.visited).length});
+    });
+  });
+  const list = tours.filter(v => Math.abs(v.est - T) <= T * 0.35).sort((a, b) => (b.unv - a.unv) || (Math.abs(a.est - T) - Math.abs(b.est - T))).slice(0, 6);
+  const out = [];
+  for (const v of list) {
+    await pause();
+    const nodes = [s0.i]; let ok = true;
+    for (const x of v.seq) {
+      const nd = x.aux ? nearNode(g, x.p, 300) : x.poi.node;
+      if (nd === null) { ok = false; break; }
+      nodes.push(nd);
+    }
+    if (!ok) continue;
+    nodes.push(s0.i);
+    const idx = legsPath(g, nodes); if (!idx) continue;
+    if (overlapRatio(g, idx) > 0.35) continue;
+    const len = pathLen(g, idx); if (Math.abs(len - T) > T * 0.35) continue;
+    out.push({idx, stops: v.cb, err: Math.abs(len - T) + (v.cb.length - v.unv) * T * 0.15});
+  }
+  return pickBest(out, Infinity);
+}
+// ルート上で寄り道先を通る位置に、案内を足す
+function stopTurns(idx, coords, stops) {
+  if (!stops) return [];
+  const cum = cumOf(coords), out = []; let from = 0;
+  stops.forEach(p => {
+    const k = idx.indexOf(p.node, from); if (k < 0) return;
+    from = k; out.push({d: cum[k + 1], kind: 'poi', label: poiLabel(p)});
+  });
+  return out;
+}
+// 地図に寄り道先の名札を出す
+function drawStops() {
+  poiMarkers.forEach(m => m.remove()); poiMarkers = [];
+  if (!route || !route.stops) return;
+  poiMarkers = route.stops.map(p => {
+    const el = document.createElement('div'); el.className = 'pmk'; el.textContent = poiLabel(p);
+    el.style.borderColor = POI[p.kind].col;
+    return new mapboxgl.Marker({element: el, anchor: 'bottom', offset: [0, -6]}).setLngLat(p.p).addTo(map);
+  });
+}
+// 「地図に神社・寺・公園を表示」
+async function drawPois() {
+  if (!$('poiShow').checked || !graph) { setData('poi', []); return; }
+  try {
+    const pois = await ensurePois(graph);
+    setData('poi', pois.map(p => ({type: 'Feature', properties: {k: p.kind, t: poiLabel(p)}, geometry: {type: 'Point', coordinates: p.p}})));
+  } catch (e) { showErr('神社・寺・公園の' + e.message); }
+}
 
 // ---------- ルートを出す ----------
 function clearRoute() {
   route = null; cands = []; candIdx = 0; lastRemain = null;
   $('altBtn').disabled = true; updWalkBtn();
   cmpCoords = null; cmpText = ''; setData('route', []); setData('cmp', []); $('sub').innerHTML = '';
-  drawProf();
+  drawProf(); drawStops();
 }
 async function calc(m) {
   if (m) mode = m;
@@ -1357,6 +1573,8 @@ async function calcTo() {
     $('sub').textContent = `直線で${fmtDist(straight)}あります。降りる駅を目的地にしてください。`;
     return;
   }
+  const kinds = vias.length ? [] : poiKinds();
+  if (kinds.length && $('ext').value === '0') $('ext').value = '500'; // 寄り道の遠回りの上限
   const X = vias.length ? 0 : Number($('ext').value);
   const pts = [from].concat(vias, [dest]);
   // 自前の計算が終わるまでの目安として、Mapboxの徒歩ルートを先に表示
@@ -1375,19 +1593,22 @@ async function calcTo() {
   const baseLen = pathLen(g, base);
   const baseTotal = baseLen + sn[0].d + sn[sn.length - 1].d;
   let list = [{idx: base}], msg = '';
-  if (X) {
+  if (kinds.length) {
+    status('寄り道の候補を探しています…'); await pause();
+    try {
+      const r = await poiRouteTo(g, sn[0].i, sn[sn.length - 1].i, from, dest, baseLen, X, kinds);
+      if (r.length) { list = r; msg = fewerMsg(r); } else msg = `　※延長（＋${fmtDist(X)}）の範囲で寄れる場所が見つからず、最短ルートを表示しています`;
+    } catch (e) { showErr('神社・寺・公園の' + e.message + '。寄り道なしで計算します'); }
+  } else if (X) {
     status('遠回りの候補を探しています…'); await pause();
     list = extendCands(g, base, baseLen, X, sn[0].i, sn[sn.length - 1].i);
     if (!list.length) { list = [{idx: base}]; msg = '　※指定の距離に近い遠回りが見つからず、最短ルートを表示しています'; }
   }
-  cands = list.map(c => {
-    const coords = [from].concat(toCoords(g, c.idx), [dest]);
-    const prof = makeProf(g, c.idx, coords);
-    return {idx: c.idx, coords, pts, baseTotal: X ? baseTotal : null, loop: false, ur: unexpRatio(g, c.idx), prof, turns: computeTurns(g, c.idx, coords, prof)};
-  });
+  cands = list.map(c => makeCand(g, c, [from].concat(toCoords(g, c.idx), [dest]), {pts, baseTotal: X ? baseTotal : null, loop: false}));
   candIdx = 0; $('altBtn').disabled = cands.length < 2;
   showRoute();
   if (vias.length && Number($('ext').value)) msg += '　※経由地があるため延長は使っていません';
+  if (vias.length && poiKinds().length) msg += '　※経由地があるため寄り道は使っていません';
   if (sn[0].d > 200) msg += `　※現在地から最寄りの道まで${fmtDist(sn[0].d)}あります`;
   if (slopeMode() && !g.ele) msg += '　※高さのデータがないため、坂は考えずに計算しました（階段の扱いは反映済み）';
   status(`計算完了 ${nowHM()}（道のデータ：${g.from}）${msg}`);
@@ -1421,7 +1642,7 @@ async function calcLoop() {
   status('周回コースを探しています…'); await pause();
   const g = graph, s0 = snap(g, from);
   if (s0.i < 0) throw new Error('近くに歩ける道が見つかりません');
-  let list;
+  let list, msg = '';
   if (vias.length) {
     // 経由地があるときは、出発点→経由地（タップ順）→出発点。2か所以上なら逆回りも「別の案」に
     const vs = vias.map(p => snap(g, p).i);
@@ -1430,17 +1651,30 @@ async function calcLoop() {
     if (!fwd) throw new Error('経由地を通る周回コースが見つかりませんでした');
     list = [{idx: fwd}];
     if (vs.length >= 2) { const rev = legsPath(g, [s0.i, ...vs.slice().reverse(), s0.i]); if (rev) list.push({idx: rev, rev: true}); }
-  } else list = loopCands(g, s0, from, T, r);
-  cands = list.map(c => {
-    const coords = [from].concat(toCoords(g, c.idx), [from]);
-    const prof = makeProf(g, c.idx, coords);
-    return {idx: c.idx, coords, pts: [from], baseTotal: null, loop: true, rev: !!c.rev, ur: unexpRatio(g, c.idx), prof, turns: computeTurns(g, c.idx, coords, prof)};
-  });
+  } else {
+    const kinds = poiKinds();
+    if (kinds.length) {
+      status('寄り道を入れた周回コースを探しています…'); await pause();
+      try {
+        list = await poiRouteLoop(g, s0, from, T, kinds);
+        msg = list.length ? fewerMsg(list) : '　※指定の距離で寄れる場所が見つからず、寄り道なしのコースを表示しています';
+      } catch (e) { showErr('神社・寺・公園の' + e.message + '。寄り道なしで計算します'); list = []; }
+    }
+    if (!list || !list.length) list = loopCands(g, s0, from, T, r);
+  }
+  cands = list.map(c => makeCand(g, c, [from].concat(toCoords(g, c.idx), [from]), {pts: [from], baseTotal: null, loop: true}));
   candIdx = 0; $('altBtn').disabled = cands.length < 2;
   showRoute();
   status(`周回コース 計算完了 ${nowHM()}（道のデータ：${g.from}）矢印の向きに歩いてください` +
-    (vias.length ? `　※経由地${vias.length}か所を通るので、距離（km）の指定は使っていません` : '') +
+    (vias.length ? `　※経由地${vias.length}か所を通るので、距離（km）の指定は使っていません` : '') + msg +
+    (vias.length && poiKinds().length ? '　※経由地があるため寄り道は使っていません' : '') +
     (slopeMode() && !g.ele ? '　※高さのデータがないため、坂は考えずに計算しました' : ''));
+}
+// ルートの候補に、高さの変化・案内・寄り道先をまとめて付ける
+function makeCand(g, c, coords, o) {
+  const prof = makeProf(g, c.idx, coords);
+  const turns = computeTurns(g, c.idx, coords, prof).concat(stopTurns(c.idx, coords, c.stops)).sort((a, b) => a.d - b.d);
+  return Object.assign({idx: c.idx, coords, rev: !!c.rev, stops: c.stops || null, ur: unexpRatio(g, c.idx), prof, turns}, o);
 }
 // 距離を指定した周回コースの候補
 function loopCands(g, s0, from, T, r) {
@@ -1462,9 +1696,9 @@ function loopCands(g, s0, from, T, r) {
 function showRoute() {
   const c = cands[candIdx];
   route = {coords: c.coords, cum: cumOf(c.coords), pts: c.pts, baseTotal: c.baseTotal, loop: c.loop, rev: c.rev, ur: c.ur, off: 0, prog: 0,
-    prof: c.prof, turns: c.turns || [], vib: {}, a: 0, remUp: c.prof ? c.prof.up : 0};
+    prof: c.prof, turns: c.turns || [], stops: c.stops, vib: {}, a: 0, remUp: c.prof ? c.prof.up : 0};
   setData('route', line(c.coords));
-  updWalkBtn();
+  updWalkBtn(); drawStops();
   const b = new mapboxgl.LngLatBounds(); c.coords.forEach(p => b.extend(p));
   if (walk) setFollow(true);
   else { setFollow(false); map.fitBounds(b, {padding: 50, maxZoom: 17}); }
@@ -1517,6 +1751,7 @@ function showSummary() {
   if (pf) h += `<br>上り ${Math.round(pf.up)}m・下り ${Math.round(pf.down)}m・最大勾配 ${Math.round(pf.maxg * 100)}%`;
   if (route.baseTotal && total - route.baseTotal > 50) h += `<br>最短より＋${fmtDist(total - route.baseTotal)}`;
   if (vias.length) h += `　経由地${vias.length}か所`;
+  if (route.stops) h += `<br>寄り道：${route.stops.map(p => esc(poiLabel(p))).join('・')}`;
   if (cands.length > 1) h += `　案${candIdx + 1}／${cands.length}${route.rev ? '（逆回り）' : ''}`;
   if (slopeMode()) h += slopeMode() === 1 ? '　坂・階段を避ける' : '　坂を選ぶ';
   if (tracks.some(t => t.k !== 'veh')) h += `<br>このルートの未踏破率 ${Math.round((route.ur ?? 1) * 100)}%`;
