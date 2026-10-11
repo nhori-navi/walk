@@ -6,19 +6,32 @@ async function fetchOverpass(bb) {
   try { return await overpass(`[out:json][timeout:90];way["highway"~"${HW}"](${bboxStr(bb)});out body;>;out skel qt;`); }
   catch (e) { throw new Error('道の' + e.message); }
 }
+// 3か所のサーバーに同時に頼み、最初に返ってきた答えを使う（各25秒で打ち切り）
 async function overpass(q) {
-  let last = null;
-  for (const url of OVERPASS) {
+  const reasons = [], ctls = [];
+  let done = false;
+  const one = async ([url, label]) => {
+    const ctl = new AbortController(), tm = setTimeout(() => ctl.abort(), 25000);
+    ctls.push(ctl);
     try {
-      const ctl = new AbortController(), tm = setTimeout(() => ctl.abort(), 30000); // 30秒で次のサーバーへ
       const r = await fetch(url, {method:'POST', body:'data=' + encodeURIComponent(q),
         headers:{'Content-Type':'application/x-www-form-urlencoded'}, signal: ctl.signal});
-      clearTimeout(tm);
       if (!r.ok) throw new Error('HTTP ' + r.status);
-      return (await r.json()).elements || [];
-    } catch (e) { last = e; }
+      let j; try { j = await r.json(); } catch (e) { throw new Error('応答が壊れていた'); }
+      if (j.remark && /error/i.test(j.remark)) throw new Error('混雑で打ち切り');
+      return j.elements || [];
+    } catch (e) {
+      if (!done) reasons.push(label + '：' + (e.name === 'AbortError' ? '時間切れ' : e.name === 'TypeError' ? '接続できず' : e.message));
+      throw e;
+    } finally { clearTimeout(tm); }
+  };
+  try {
+    const els = await Promise.any(OVERPASS.map(one));
+    done = true; ctls.forEach(c => c.abort()); // 残りの問い合わせは止める
+    return els;
+  } catch (e) {
+    throw new Error('データを取得できませんでした（' + reasons.join('、') + '）');
   }
-  throw new Error('データを取得できませんでした（' + (last && last.name === 'AbortError' ? '時間切れ' : last.message) + '）');
 }
 // 必要な範囲の道の網を用意する（保存済みがあればそれを使い、なければ取り寄せて保存）
 async function ensureGraph(need, fetchBB) {
