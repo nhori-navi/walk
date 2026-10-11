@@ -63,7 +63,7 @@ async function ensureGraph(need, fetchBB) {
   status('道の網を組み立て中…'); await pause();
   graph = buildGraph(els); graph.bb = bb; graph.from = from; graph.areaId = areaId;
   markWalked(graph);
-  drawNet(); drawPois();
+  drawNet(); drawPois(); drawTracks();
 }
 // 起動直後に、現在地の周りの道のデータを先に用意しておく
 async function prefetch() {
@@ -125,7 +125,7 @@ function buildGraph(els) {
   return {lon, lat, adj, comp, main, ways, edges, emap, floatN};
 }
 function markWalked(g) {
-  g.edges.forEach(e => { e.k = 0; });
+  g.edges.forEach(e => { e.k = 0; }); g.wIdx = null;
   const bb = g.bb, kx = Math.cos((bb.s + bb.n) / 2 * Math.PI / 180) * 111320, ky = 110540, C = 40;
   const cell = p => [Math.floor((p[0] - bb.w) * kx / C), Math.floor((p[1] - bb.s) * ky / C)];
   const inBB = p => p[0] >= bb.w && p[0] <= bb.e && p[1] >= bb.s && p[1] <= bb.n;
@@ -163,6 +163,48 @@ function markWalked(g) {
     if (hit / n >= 0.5) e.k = 1;
   });
 }
+
+// ---------- 記録の整理用：線分を40m四方のマスに入れて、点の近くにあるかをすばやく調べる ----------
+function segIndex(bb, segs) {
+  const kx = Math.cos((bb.s + bb.n) / 2 * Math.PI / 180) * 111320, ky = 110540, C = 40;
+  const cell = p => [Math.floor((p[0] - bb.w) * kx / C), Math.floor((p[1] - bb.s) * ky / C)];
+  const grid = new Map();
+  segs.forEach(s => {
+    const ca = cell(s[0]), cb = cell(s[1]);
+    for (let x = Math.min(ca[0], cb[0]); x <= Math.max(ca[0], cb[0]); x++)
+      for (let y = Math.min(ca[1], cb[1]); y <= Math.max(ca[1], cb[1]); y++) {
+        const k = x + ',' + y; let l = grid.get(k); if (!l) { l = []; grid.set(k, l); } l.push(s);
+      }
+  });
+  return {near(p, r) {
+    const [cx, cy] = cell(p), R = Math.ceil(r / C);
+    for (let dx = -R; dx <= R; dx++) for (let dy = -R; dy <= R; dy++) {
+      const l = grid.get((cx + dx) + ',' + (cy + dy));
+      if (l) for (const s of l) if (segDist(p, s[0], s[1]).d <= r) return true;
+    }
+    return false;
+  }};
+}
+// すべての道（通れない道も含む）
+function roadIdx(g) {
+  if (!g.rIdx) {
+    const s = [];
+    g.ways.forEach(w => { for (let i = 1; i < w.n.length; i++) s.push([[g.lon[w.n[i - 1]], g.lat[w.n[i - 1]]], [g.lon[w.n[i]], g.lat[w.n[i]]]]); });
+    g.rIdx = segIndex(g.bb, s);
+  }
+  return g.rIdx;
+}
+// 歩いたことのある道
+function walkedIdx(g) {
+  if (!g.wIdx) g.wIdx = segIndex(g.bb, g.edges.filter(e => e.k).map(e => [[g.lon[e.a], g.lat[e.a]], [g.lon[e.b], g.lat[e.b]]]));
+  return g.wIdx;
+}
+// 道のデータで判定できる場所か（読み込んだ範囲の縁から50m内側）
+function judgeable(g, p) {
+  const bb = g.bb, mx = 50 / (Math.cos((bb.s + bb.n) / 2 * Math.PI / 180) * 111320), my = 50 / 110540;
+  return p[0] >= bb.w + mx && p[0] <= bb.e - mx && p[1] >= bb.s + my && p[1] <= bb.n - my;
+}
+
 function drawNet() {
   if (!$('netChk').checked || !graph) { setData('net', []); return; }
   const g = graph, f = [];
