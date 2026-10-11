@@ -27,6 +27,7 @@ input[type=checkbox]{padding:0;margin:0 4px 0 0}
 details{margin:8px 0;background:#fff;border:1px solid #ddd;border-radius:6px;padding:6px}
 #walkBtn{background:#1f6fd1;color:#fff;border:none;border-radius:6px;font-weight:bold}
 #result{font-size:14px;color:#1f3a93;margin:4px 0}
+#prof{display:none;width:100%;height:80px;background:#fff;border:1px solid #ddd;border-radius:6px;margin:0 0 6px}
 #favForm{display:none;background:#fff3cd;border-radius:6px;padding:4px 6px;margin:4px 0}
 .me{width:34px;height:34px;position:relative}
 .me .dot{position:absolute;left:8px;top:8px;width:18px;height:18px;border-radius:50%;background:#1e90ff;border:3px solid #fff;box-shadow:0 0 6px rgba(0,0,0,.5)}
@@ -50,6 +51,7 @@ body.walking.menu #panel{display:block;top:50%;bottom:52px;left:0;right:0;width:
 <div id="panel">
   <div id="rem">目的地を設定してください</div>
   <div id="sub"></div>
+  <canvas id="prof"></canvas>
   <div id="result"></div>
   <div><button id="walkBtn" disabled>歩き始める</button></div>
   <div><input id="search" placeholder="目的地（駅名・施設名・住所）"><button id="searchBtn">検索</button></div>
@@ -63,6 +65,7 @@ body.walking.menu #panel{display:block;top:50%;bottom:52px;left:0;right:0;width:
       <option value="1000">＋1km</option><option value="2000">＋2km</option></select>
     未踏破を優先：<select id="unexp"><option value="1">なし</option><option value="1.3">弱</option><option value="1.6">強</option></select>
     <button id="altBtn" disabled>別の案</button></div>
+  <div class="row">坂：<select id="slope"><option value="0">気にしない</option><option value="1">なるべく避ける（階段も）</option><option value="2">あえて選ぶ</option></select></div>
   <div class="row">周回：<select id="loopKm"><option>1</option><option>2</option><option selected>3</option><option>5</option></select>km
     <button id="loopBtn">周回コースを作る</button></div>
   <div class="small"><label><input type="checkbox" id="walkedChk" checked>歩いた道（緑）</label>　<label><input type="checkbox" id="vehChk">乗り物の区間（赤）</label></div>
@@ -73,7 +76,7 @@ body.walking.menu #panel{display:block;top:50%;bottom:52px;left:0;right:0;width:
   <div id="err" class="small" style="color:#c00"></div>
   <details>
     <summary>歩いた記録の管理</summary>
-    <div class="small">GPSLoggerのGPXファイルを選んでください（複数可）。同じファイルを読み込み直すと、前回分を置き換えます。書き出したファイル（.json）を選ぶと、記録を復元できます。</div>
+    <div class="small">OpenTracksのGPXファイル（Download/opentracks）を選んでください（複数可）。同じファイルを読み込み直すと、前回分を置き換えます。書き出したファイル（.json）を選ぶと、記録を復元できます。</div>
     <input type="file" id="recFile" multiple style="display:none">
     <button id="recImport">記録を読み込む</button><button id="recExport">記録を書き出す</button><br>
     <button id="recClear">記録をすべて消す</button>
@@ -92,7 +95,7 @@ body.walking.menu #panel{display:block;top:50%;bottom:52px;left:0;right:0;width:
     <div class="small">道のデータはこの端末に30日間保存して使い回します。OpenStreetMapを書き足したあとなどは、下のボタンで取り直してください。</div>
     <button id="netReset">道のデータを取り直す</button>
   </details>
-  <div class="small">道路・名称検索データ © OpenStreetMap contributors</div>
+  <div class="small">道路・名称検索データ © OpenStreetMap contributors／標高：国土地理院（標高タイル）</div>
 </div>
 <script>
 // ▼▼▼ トークン ▼▼▼
@@ -142,6 +145,8 @@ function setData(id, f) { const s = map.getSource(id); if (s) s.setData({type:'F
 const line = c => [{type:'Feature', properties:{}, geometry:{type:'LineString', coordinates:c}}];
 function fmtDist(m) { return m >= 1000 ? (m / 1000).toFixed(1) + 'km' : Math.round(m / 10) * 10 + 'm'; }
 const mins = m => Math.max(1, Math.round(m / SPEED));
+// 坂を加味した所要時間（分速80m＋上り10mごとに1分）
+const walkMin = (m, up) => Math.max(1, Math.round(m / SPEED + (up || 0) / 10));
 const hm = d => d.toLocaleTimeString('ja-JP', {hour:'2-digit', minute:'2-digit'});
 const nowHM = () => hm(new Date());
 function fmtTime(sec) { const h = Math.floor(sec / 3600), m = Math.floor(sec % 3600 / 60); return h ? `${h}時間${String(m).padStart(2, '0')}分` : `${m}分`; }
@@ -209,6 +214,179 @@ const cachePut = (id, v) => idbDo('readwrite', st => st.put(v, id));
 const cacheDel = id => idbDo('readwrite', st => st.delete(id));
 const cacheClear = () => idbDo('readwrite', st => st.clear());
 function saveMeta() { try { localStorage.setItem('walk_area_meta', JSON.stringify(areaMeta)); } catch (e) {} }
+
+// ---------- 標高（国土地理院の標高タイル） ----------
+// 5m間隔（航空レーザー）→ 5m間隔（写真測量）→ 10m間隔 の順に、データのあるものを使う
+const DEM = [{id: 'dem5a_png', z: 15}, {id: 'dem5b_png', z: 15}, {id: 'dem_png', z: 14}];
+const demMem = new Map(); // 読み込み済みのタイル（null＝その場所にデータなし）
+function tileXY(p, z) {
+  const n = 2 ** z, s = Math.sin(p[1] * Math.PI / 180);
+  return [(p[0] + 180) / 360 * n, (0.5 - Math.log((1 + s) / (1 - s)) / (4 * Math.PI)) * n];
+}
+async function decodeDem(buf) {
+  const bmp = await createImageBitmap(new Blob([buf], {type: 'image/png'}), {premultiplyAlpha: 'none', colorSpaceConversion: 'none'});
+  const cv = document.createElement('canvas'); cv.width = cv.height = 256;
+  const cx = cv.getContext('2d', {willReadFrequently: true}); cx.drawImage(bmp, 0, 0);
+  const d = cx.getImageData(0, 0, 256, 256).data, h = new Float32Array(65536);
+  for (let i = 0; i < 65536; i++) {
+    const v = d[i * 4] * 65536 + d[i * 4 + 1] * 256 + d[i * 4 + 2];
+    h[i] = v === 8388608 ? NaN : (v < 8388608 ? v : v - 16777216) * 0.01; // 0.01m単位。8388608は「データなし」
+  }
+  return h;
+}
+async function demTile(set, x, y) {
+  const key = `dem:${set.id}/${set.z}/${x}/${y}`;
+  if (demMem.has(key)) return demMem.get(key);
+  let buf;
+  try { buf = await cacheGet(key); } catch (e) {}
+  if (buf === undefined) {
+    const r = await fetch(`https://cyberjapandata.gsi.go.jp/xyz/${set.id}/${set.z}/${x}/${y}.png`);
+    if (r.status === 404) buf = 0; // この場所にはこの種類のデータがない
+    else if (!r.ok) throw new Error('HTTP ' + r.status);
+    else buf = await r.arrayBuffer();
+    try { await cachePut(key, buf); } catch (e) {}
+  }
+  const h = buf ? await decodeDem(buf) : null;
+  demMem.set(key, h);
+  if (demMem.size > 150) demMem.delete(demMem.keys().next().value); // 使いすぎないよう古いものから手放す
+  return h;
+}
+function demSample(h, px, py) {
+  px = Math.min(255, Math.max(0, px - 0.5)); py = Math.min(255, Math.max(0, py - 0.5));
+  const x0 = Math.min(254, Math.floor(px)), y0 = Math.min(254, Math.floor(py)), fx = px - x0, fy = py - y0;
+  const a = h[y0 * 256 + x0], b = h[y0 * 256 + x0 + 1], c = h[(y0 + 1) * 256 + x0], d = h[(y0 + 1) * 256 + x0 + 1];
+  if ([a, b, c, d].some(isNaN)) return h[Math.round(py) * 256 + Math.round(px)];
+  return (a * (1 - fx) + b * fx) * (1 - fy) + (c * (1 - fx) + d * fx) * fy;
+}
+// 複数地点の高さをまとめて求める（取れない地点はNaN）
+async function elevOf(pts) {
+  const out = new Float32Array(pts.length).fill(NaN);
+  let todo = pts.map((p, i) => i);
+  for (const set of DEM) {
+    if (!todo.length) break;
+    const need = new Map();
+    todo.forEach(i => {
+      const [x, y] = tileXY(pts[i], set.z), k = Math.floor(x) + '/' + Math.floor(y);
+      if (!need.has(k)) need.set(k, []);
+      need.get(k).push([i, x, y]);
+    });
+    const keys = [...need.keys()];
+    for (let j = 0; j < keys.length; j += 6) {
+      await Promise.all(keys.slice(j, j + 6).map(async k => {
+        const [tx, ty] = k.split('/').map(Number), h = await demTile(set, tx, ty);
+        if (h) for (const [i, x, y] of need.get(k)) out[i] = demSample(h, (x - tx) * 256, (y - ty) * 256);
+      }));
+    }
+    todo = todo.filter(i => isNaN(out[i]));
+  }
+  return out;
+}
+// 読み込み済みのタイルだけで高さを求める（歩行中のカロリー計算用。なければNaN）
+function elevSync(p) {
+  for (const set of DEM) {
+    const [x, y] = tileXY(p, set.z), tx = Math.floor(x), ty = Math.floor(y);
+    const h = demMem.get(`dem:${set.id}/${set.z}/${tx}/${ty}`);
+    if (h === undefined) return NaN;
+    if (h) { const v = demSample(h, (x - tx) * 256, (y - ty) * 256); if (!isNaN(v)) return v; }
+  }
+  return NaN;
+}
+// 道の網の全地点に高さを付ける。橋・トンネルの上は、両側の道の高さからなめらかにつなぐ
+async function ensureElev(g) {
+  if (g.ele !== undefined) return g.ele;
+  status('高さのデータを準備中…（初めての場所は少し時間がかかります）'); await pause();
+  try {
+    const ele = await elevOf(g.lon.map((x, i) => [x, g.lat[i]]));
+    const fl = g.floatN;
+    for (let it = 0; it < 300 && fl.length; it++) {
+      for (const i of fl) {
+        let s = 0, sw = 0;
+        for (const [u, e] of g.adj[i]) if (!isNaN(ele[u])) { const w = 1 / Math.max(1, e.w); s += w * ele[u]; sw += w; }
+        if (sw) ele[i] = s / sw;
+      }
+    }
+    g.ele = ele;
+  } catch (e) {
+    g.ele = null;
+    showErr('高さのデータを取得できませんでした（' + e.message + '）。坂を考えずに計算します');
+  }
+  return g.ele;
+}
+// 坂を加味した道の重み（a→bの向きで計算）
+function slopeCost(c, e, a, b, sm) {
+  let dh = b - a; if (isNaN(dh)) dh = 0;
+  const gr = e.w >= 5 ? dh / e.w : 0;
+  if (sm === 1) {
+    if (e.s) c *= 4;                                   // 階段は避ける
+    if (dh > 0) c += dh * (gr > 0.08 ? 30 : 15);       // 上り1m＝平地15m分（急坂は30m分）
+    else if (gr < -0.08) c += -dh * 5;                 // 急な下りも少し避ける
+  } else if (sm === 2) {
+    if (gr > 0.05) c *= 0.6;                           // 上り坂を選ばれやすくする
+  }
+  return c;
+}
+// ルートの高さの変化（10mごと）と、上り・下り・最大勾配
+function makeProf(g, idx, coords) {
+  if (!g.ele || !idx.length) return null;
+  const hs = [g.ele[idx[0]], ...idx.map(i => g.ele[i]), g.ele[idx[idx.length - 1]]];
+  if (hs.every(isNaN)) return null;
+  const st = coords.map((c, k) => {
+    if (k < 1 || k >= idx.length) return 0;
+    const e = g.emap.get(edgeKey(idx[k - 1], idx[k])); return e && e.s ? 1 : 0;
+  });
+  const cum = cumOf(coords), total = cum[cum.length - 1], D = [], H = [], S = [];
+  let k = 1, last = hs.find(v => !isNaN(v));
+  for (let d = 0; ; d += 10) {
+    if (d > total) d = total;
+    while (k < cum.length - 1 && cum[k] < d) k++;
+    const t = (d - cum[k - 1]) / ((cum[k] - cum[k - 1]) || 1), a = hs[k - 1], b = hs[k];
+    let h = isNaN(a) ? b : isNaN(b) ? a : a + (b - a) * t;
+    if (isNaN(h)) h = last; last = h;
+    D.push(d); H.push(h); S.push(st[k - 1]);
+    if (d >= total) break;
+  }
+  const Hs = H.map((h, i) => (H[Math.max(0, i - 1)] + h + H[Math.min(H.length - 1, i + 1)]) / 3); // 細かいぶれをならす
+  let up = 0, down = 0, maxg = 0;
+  for (let i = 1; i < Hs.length; i++) { const dh = Hs[i] - Hs[i - 1]; if (dh > 0) up += dh; else down -= dh; }
+  for (let i = 3; i < Hs.length; i++) { const dd = D[i] - D[i - 3]; if (dd >= 25) maxg = Math.max(maxg, Math.abs(Hs[i] - Hs[i - 3]) / dd); }
+  return {d: D, h: Hs, s: S, up, down, maxg};
+}
+function upFrom(pf, a) {
+  let up = 0;
+  for (let i = 1; i < pf.d.length; i++) if (pf.d[i] > a) { const dh = pf.h[i] - pf.h[i - 1]; if (dh > 0) up += dh; }
+  return up;
+}
+function drawProf(a) {
+  const cv = $('prof'), pf = route && route.prof;
+  if (!pf) { cv.style.display = 'none'; return; }
+  cv.style.display = 'block';
+  const r = window.devicePixelRatio || 1, W = cv.clientWidth, Hh = 80;
+  if (!W) return;
+  cv.width = W * r; cv.height = Hh * r;
+  const cx = cv.getContext('2d'); cx.scale(r, r); cx.clearRect(0, 0, W, Hh);
+  let lo = Math.min(...pf.h), hi = Math.max(...pf.h);
+  if (hi - lo < 20) { const m = (hi + lo) / 2; lo = m - 10; hi = m + 10; }
+  const L = 34, T = 6, B = 16, total = pf.d[pf.d.length - 1] || 1;
+  const X = d => L + (W - L - 6) * d / total, Y = h => T + (Hh - T - B) * (1 - (h - lo) / (hi - lo));
+  cx.beginPath(); cx.moveTo(X(0), Hh - B);
+  pf.d.forEach((d, i) => cx.lineTo(X(d), Y(pf.h[i])));
+  cx.lineTo(X(total), Hh - B); cx.closePath(); cx.fillStyle = 'rgba(31,111,209,.15)'; cx.fill();
+  cx.beginPath(); pf.d.forEach((d, i) => i ? cx.lineTo(X(d), Y(pf.h[i])) : cx.moveTo(X(d), Y(pf.h[i])));
+  cx.strokeStyle = '#1f6fd1'; cx.lineWidth = 2; cx.stroke();
+  cx.strokeStyle = '#f39c12'; cx.lineWidth = 4;
+  for (let i = 1; i < pf.d.length; i++) if (pf.s[i]) {
+    cx.beginPath(); cx.moveTo(X(pf.d[i - 1]), Y(pf.h[i - 1])); cx.lineTo(X(pf.d[i]), Y(pf.h[i])); cx.stroke();
+  }
+  if (a != null && a > 0) {
+    cx.strokeStyle = '#c0392b'; cx.lineWidth = 2;
+    cx.beginPath(); cx.moveTo(X(Math.min(a, total)), T); cx.lineTo(X(Math.min(a, total)), Hh - B); cx.stroke();
+  }
+  cx.fillStyle = '#555'; cx.font = '11px sans-serif'; cx.textBaseline = 'middle';
+  cx.fillText(Math.round(hi) + 'm', 2, Y(hi)); cx.fillText(Math.round(lo) + 'm', 2, Y(lo));
+  cx.textBaseline = 'alphabetic';
+  cx.fillText('0', X(0), Hh - 3); const tl = fmtDist(total); cx.fillText(tl, W - 6 - cx.measureText(tl).width, Hh - 3);
+}
+window.addEventListener('resize', () => { if (route) drawProf(route.a); });
 
 // ---------- 地図の準備 ----------
 map.on('load', () => {
@@ -339,6 +517,13 @@ function walkStep(c) {
           walk.dist += d;
           walk.kcal += mets(v * 3.6) * weight() * dt / 3600 * 1.05;
           walk.track.pts.push(roundP(p));
+          // 上った分のカロリー（標高タイルの高さで2m以上変わったら数える。体重1kgを1m持ち上げる≒0.0094kcal）
+          const eh = elevSync(p);
+          if (!isNaN(eh)) {
+            if (walk.eRef === null) walk.eRef = eh;
+            else if (eh - walk.eRef >= 2) { walk.up += eh - walk.eRef; walk.kcal += weight() * (eh - walk.eRef) * 0.0094; walk.eRef = eh; }
+            else if (walk.eRef - eh >= 2) walk.eRef = eh;
+          }
         }
         walk.last = {p, t: now};
       }
@@ -361,13 +546,14 @@ function renderHud() {
   else if (lastRemain < 20) top = `<div class="big">${route && route.loop ? '出発点に戻りました' : '到着しました'}</div>`;
   else top = `<div class="big">残り ${fmtDist(lastRemain)}</div><div class="big">到着 ${hm(new Date(now + lastRemain / pace * 1000))}</div>`;
   $('hud').innerHTML = top +
+    (route && route.prof && lastRemain >= 20 ? `<div>残りの上り ${Math.round(route.remUp)}m</div>` : '') +
     `<div>${v === null ? '—' : (v * 3.6).toFixed(1)} km/h　${Math.round(walk.kcal)} kcal</div>` +
     `<div class="small" style="margin:0">歩行 ${fmtTime(el)}・${fmtDist(walk.dist)}</div>`;
 }
 function resizeSoon() { setTimeout(() => map.resize(), 60); }
 $('walkBtn').onclick = () => {
   if (!route) return;
-  walk = {t0: Date.now(), dist: 0, kcal: 0, last: null, hist: [], track: {k: 'walk', t0: Date.now(), pts: []}};
+  walk = {t0: Date.now(), dist: 0, kcal: 0, up: 0, eRef: null, last: null, hist: [], track: {k: 'walk', t0: Date.now(), pts: []}};
   tracks.push(walk.track);
   document.body.classList.add('walking'); document.body.classList.remove('menu');
   $('menuBtn').textContent = '▲メニュー';
@@ -387,7 +573,7 @@ $('endBtn').onclick = () => {
   if (!walk) return;
   const el = (Date.now() - walk.t0) / 1000;
   const avg = el > 0 ? walk.dist / el * 3.6 : 0;
-  $('result').textContent = `今回の歩行：${fmtTime(el)}・${fmtDist(walk.dist)}・平均${avg.toFixed(1)}km/h・${Math.round(walk.kcal)}kcal`;
+  $('result').textContent = `今回の歩行：${fmtTime(el)}・${fmtDist(walk.dist)}・平均${avg.toFixed(1)}km/h・${walk.up >= 1 ? `上り約${Math.round(walk.up)}m・` : ''}${Math.round(walk.kcal)}kcal`;
   if (walk.track.pts.length < 2) tracks = tracks.filter(t => t !== walk.track);
   saveTracks();
   clearInterval(hudTimer); walk = null;
@@ -395,8 +581,7 @@ $('endBtn').onclick = () => {
   resizeSoon();
   afterTracksChanged();
 };
-
-// ---------- 歩いた記録（保存・表示） ----------
+  // ---------- 歩いた記録（保存・表示） ----------
 function saveTracks() {
   try { localStorage.setItem('walk_tracks', JSON.stringify(tracks)); return true; }
   catch (e) { showErr('記録の保存に失敗しました。容量不足の可能性があります。「記録を書き出す」で控えを取ってください'); return false; }
@@ -537,7 +722,9 @@ $('recFile').onchange = async () => {
       const before = tracks.length;
       tracks = tracks.filter(t => t.src !== f.name);
       if (tracks.length < before) replaced++;
-      segs.forEach(s => { if (s.length >= 2) { const o = processSeg(s, f.name); tracks.push(...o); added += o.length; } });
+      // OpenTracksはGPSが途切れると区切り（trkseg）を分けるので、1本につなげてから判定する
+      const all = segs.flat();
+      if (all.length >= 2) { const o = processSeg(all, f.name); tracks.push(...o); added += o.length; }
     } catch (e) { bad++; showErr(`${f.name}：${e.message}`); }
   }
   saveTracks(); afterTracksChanged();
@@ -619,6 +806,7 @@ $('viaClear').onclick = () => { clearVia(); calc('to'); };
 $('recalcBtn').onclick = () => calc();
 $('ext').onchange = () => { if (dest && mode === 'to') calc('to'); };
 $('unexp').onchange = () => { if (route) calc(); };
+$('slope').onchange = () => { if (route) calc(); };
 $('loopBtn').onclick = () => {
   dest = null; clearVia();
   if (destMarker) { destMarker.remove(); destMarker = null; }
@@ -754,17 +942,21 @@ function buildGraph(els) {
   const idx = new Map(), lon = [], lat = [], ways = [], edges = [], emap = new Map();
   els.forEach(e => { if (e.type === 'node') { idx.set(e.id, lon.length); lon.push(e.lon); lat.push(e.lat); } });
   const adj = lon.map(() => []);
+  const onGround = new Uint8Array(lon.length), onBridge = new Uint8Array(lon.length);
   els.forEach(e => {
     if (e.type !== 'way' || !e.nodes) return;
     const n = e.nodes.map(id => idx.get(id)).filter(i => i !== undefined);
     if (n.length < 2) return;
-    const ok = walkable(e.tags);
-    ways.push({n, k: !ok ? 'ng' : (e.tags && e.tags.highway === 'steps' ? 'steps' : 'ok')});
+    const t = e.tags || {}, ok = walkable(t), stp = t.highway === 'steps';
+    // 橋・トンネルの上は地面の高さと違うので、高さを両側からつなぐ対象にする
+    const br = (t.bridge && t.bridge !== 'no') || t.tunnel === 'yes';
+    n.forEach(i => { if (br) onBridge[i] = 1; else onGround[i] = 1; });
+    ways.push({n, k: !ok ? 'ng' : (stp ? 'steps' : 'ok')});
     if (!ok) return;
     for (let i = 0; i < n.length - 1; i++) {
       const a = n[i], b = n[i + 1];
       if (a === b || emap.has(edgeKey(a, b))) continue;
-      const ed = {a, b, w: distM([lon[a], lat[a]], [lon[b], lat[b]]), k: 0};
+      const ed = {a, b, w: distM([lon[a], lat[a]], [lon[b], lat[b]]), k: 0, s: stp ? 1 : 0};
       edges.push(ed); emap.set(edgeKey(a, b), ed);
       adj[a].push([b, ed]); adj[b].push([a, ed]);
     }
@@ -781,7 +973,9 @@ function buildGraph(els) {
     if (size > mainSize) { mainSize = size; main = cid; }
     cid++;
   }
-  return {lon, lat, adj, comp, main, ways, edges, emap};
+  const floatN = [];
+  for (let i = 0; i < lon.length; i++) if (onBridge[i] && !onGround[i]) floatN.push(i);
+  return {lon, lat, adj, comp, main, ways, edges, emap, floatN};
 }
 function markWalked(g) {
   g.edges.forEach(e => { e.k = 0; });
@@ -865,16 +1059,19 @@ class Heap {
   }
 }
 function astar(g, s, t) {
-  const mult = Number($('unexp').value) || 1;
+  const mult = Number($('unexp').value) || 1, sm = slopeMode(), ele = g.ele || null;
+  const hk = sm === 2 ? 0.6 : 1; // 「あえて選ぶ」は道が軽くなるので、目安の距離も合わせて軽くする
   const n = g.lon.length, d = new Float64Array(n).fill(Infinity), prev = new Int32Array(n).fill(-1), done = new Uint8Array(n);
-  const tp = [g.lon[t], g.lat[t]], h = i => distM([g.lon[i], g.lat[i]], tp);
+  const tp = [g.lon[t], g.lat[t]], h = i => distM([g.lon[i], g.lat[i]], tp) * hk;
   const H = new Heap(); d[s] = 0; H.push(h(s), s);
   while (H.size) {
     const v = H.pop()[1];
     if (done[v]) continue; done[v] = 1;
     if (v === t) break;
     for (const [u, e] of g.adj[v]) {
-      const nd = d[v] + (e.k ? e.w * mult : e.w);
+      let c = e.k ? e.w * mult : e.w;
+      if (sm) c = slopeCost(c, e, ele ? ele[v] : NaN, ele ? ele[u] : NaN, sm);
+      const nd = d[v] + c;
       if (nd < d[u]) { d[u] = nd; prev[u] = v; H.push(nd + h(u), u); }
     }
   }
@@ -883,6 +1080,7 @@ function astar(g, s, t) {
   for (let v = t; v !== -1; v = prev[v]) path.push(v);
   return path.reverse();
 }
+const slopeMode = () => Number($('slope').value) || 0;
 const toCoords = (g, idx) => idx.map(i => [g.lon[i], g.lat[i]]);
 function pathLen(g, idx) {
   let L = 0;
@@ -936,6 +1134,7 @@ function clearRoute() {
   route = null; cands = []; candIdx = 0; lastRemain = null;
   $('altBtn').disabled = true; $('walkBtn').disabled = true;
   cmpCoords = null; cmpText = ''; setData('route', []); setData('cmp', []); $('sub').innerHTML = '';
+  drawProf();
 }
 async function calc(m) {
   if (m) mode = m;
@@ -966,6 +1165,7 @@ async function calcTo() {
   if (!walk) { const b = new mapboxgl.LngLatBounds(); pts.forEach(p => b.extend(p)); setFollow(false); map.fitBounds(b, {padding: 60, maxZoom: 16}); }
   const extra = X ? X / 2 + 300 : 0;
   await ensureGraph(bboxOf(pts, MARGIN + extra), bboxOf(pts, MARGIN + extra + 500));
+  await ensureElev(graph);
   status('経路を計算中…'); await pause();
   const g = graph, sn = pts.map(p => snap(g, p));
   if (sn.some(s => s.i < 0)) throw new Error('近くに歩ける道が見つかりません');
@@ -979,12 +1179,15 @@ async function calcTo() {
     list = extendCands(g, base, baseLen, X, sn[0].i, sn[sn.length - 1].i);
     if (!list.length) { list = [{idx: base}]; msg = '　※指定の距離に近い遠回りが見つからず、最短ルートを表示しています'; }
   }
-  cands = list.map(c => ({idx: c.idx, coords: [from].concat(toCoords(g, c.idx), [dest]), pts,
-    baseTotal: X ? baseTotal : null, loop: false, ur: unexpRatio(g, c.idx)}));
+  cands = list.map(c => {
+    const coords = [from].concat(toCoords(g, c.idx), [dest]);
+    return {idx: c.idx, coords, pts, baseTotal: X ? baseTotal : null, loop: false, ur: unexpRatio(g, c.idx), prof: makeProf(g, c.idx, coords)};
+  });
   candIdx = 0; $('altBtn').disabled = cands.length < 2;
   showRoute();
   if (via && Number($('ext').value)) msg += '　※経由地があるため延長は使っていません';
   if (sn[0].d > 200) msg += `　※現在地から最寄りの道まで${fmtDist(sn[0].d)}あります`;
+  if (slopeMode() && !g.ele) msg += '　※高さのデータがないため、坂は考えずに計算しました（階段の扱いは反映済み）';
   status(`計算完了 ${nowHM()}（道のデータ：${g.from}）${msg}`);
 }
 function extendCands(g, base, S, X, s, t) {
@@ -1009,6 +1212,7 @@ async function calcLoop() {
   const r = T / (3 * 1.25);
   cmpText = ''; cmpCoords = null; setData('cmp', []);
   await ensureGraph(bboxOf([from], r * 1.3 + MARGIN), bboxOf([from], r * 1.3 + MARGIN + 500));
+  await ensureElev(graph);
   status('周回コースを探しています…'); await pause();
   const g = graph, s0 = snap(g, from);
   if (s0.i < 0) throw new Error('近くに歩ける道が見つかりません');
@@ -1025,15 +1229,19 @@ async function calcLoop() {
   }
   const list = pickBest(out, Math.max(300, T * 0.25));
   if (!list.length) { clearRoute(); throw new Error('条件に合う周回コースが見つかりませんでした。距離を変えて試してください'); }
-  cands = list.map(c => ({idx: c.idx, coords: [from].concat(toCoords(g, c.idx), [from]), pts: [from],
-    baseTotal: null, loop: true, ur: unexpRatio(g, c.idx)}));
+  cands = list.map(c => {
+    const coords = [from].concat(toCoords(g, c.idx), [from]);
+    return {idx: c.idx, coords, pts: [from], baseTotal: null, loop: true, ur: unexpRatio(g, c.idx), prof: makeProf(g, c.idx, coords)};
+  });
   candIdx = 0; $('altBtn').disabled = cands.length < 2;
   showRoute();
-  status(`周回コース 計算完了 ${nowHM()}（道のデータ：${g.from}）矢印の向きに歩いてください`);
+  status(`周回コース 計算完了 ${nowHM()}（道のデータ：${g.from}）矢印の向きに歩いてください` +
+    (slopeMode() && !g.ele ? '　※高さのデータがないため、坂は考えずに計算しました' : ''));
 }
 function showRoute() {
   const c = cands[candIdx];
-  route = {coords: c.coords, cum: cumOf(c.coords), pts: c.pts, baseTotal: c.baseTotal, loop: c.loop, ur: c.ur, off: 0, prog: 0};
+  route = {coords: c.coords, cum: cumOf(c.coords), pts: c.pts, baseTotal: c.baseTotal, loop: c.loop, ur: c.ur, off: 0, prog: 0,
+    prof: c.prof, a: 0, remUp: c.prof ? c.prof.up : 0};
   setData('route', line(c.coords));
   $('walkBtn').disabled = false;
   const b = new mapboxgl.LngLatBounds(); c.coords.forEach(p => b.extend(p));
@@ -1060,7 +1268,7 @@ async function fetchCmp(pts) {
 function updateRemain() {
   if (!route) return;
   const c = route.coords, total = route.cum[route.cum.length - 1];
-  let remain = total;
+  let remain = total, a = 0;
   if (pos) {
     let best = {d: 1e12, i: 0, t: 0};
     for (let i = Math.max(0, route.prog - 2); i < c.length - 1; i++) {
@@ -1069,21 +1277,26 @@ function updateRemain() {
     }
     route.off = best.d;
     if (best.d <= 60) route.prog = Math.max(route.prog, best.i);
-    const a = route.cum[best.i] + best.t * (route.cum[best.i + 1] - route.cum[best.i]);
+    a = route.cum[best.i] + best.t * (route.cum[best.i + 1] - route.cum[best.i]);
     remain = Math.max(0, total - a);
   }
-  lastRemain = remain;
-  $('rem').textContent = remain < 20 ? (route.loop ? '出発点に戻りました' : '目的地付近です') : `残り ${fmtDist(remain)}　約${mins(remain)}分`;
+  lastRemain = remain; route.a = a;
+  route.remUp = route.prof ? upFrom(route.prof, a) : 0;
+  $('rem').textContent = remain < 20 ? (route.loop ? '出発点に戻りました' : '目的地付近です') : `残り ${fmtDist(remain)}　約${walkMin(remain, route.remUp)}分`;
   showSummary();
+  drawProf(a);
   renderHud();
 }
 function showSummary() {
   if (!route) return;
   const total = route.cum[route.cum.length - 1];
-  let h = (route.loop ? '周回コース ' : '') + `全長 ${fmtDist(total)}・約${mins(total)}分（分速80m）`;
+  const pf = route.prof;
+  let h = (route.loop ? '周回コース ' : '') + `全長 ${fmtDist(total)}・約${walkMin(total, pf ? pf.up : 0)}分（分速80m${pf ? '＋上り10mごとに1分' : ''}）`;
+  if (pf) h += `<br>上り ${Math.round(pf.up)}m・下り ${Math.round(pf.down)}m・最大勾配 ${Math.round(pf.maxg * 100)}%`;
   if (route.baseTotal && total - route.baseTotal > 50) h += `<br>最短より＋${fmtDist(total - route.baseTotal)}`;
   if (via && !route.loop) h += '　経由地あり';
   if (cands.length > 1) h += `　案${candIdx + 1}／${cands.length}`;
+  if (slopeMode()) h += slopeMode() === 1 ? '　坂・階段を避ける' : '　坂を選ぶ';
   if (tracks.some(t => t.k !== 'veh')) h += `<br>このルートの未踏破率 ${Math.round((route.ur ?? 1) * 100)}%`;
   if (cmpText && !route.loop) h += '<br>' + cmpText;
   if (route.off > 60) h += '<br><span style="color:#c0392b">ルートから離れています。必要なら「再計算」を押してください</span>';
