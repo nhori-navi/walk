@@ -69,6 +69,8 @@ function maybeVibrate() {
 function renderHud() {
   if (!walk) return;
   const now = Date.now(), el = (now - walk.t0) / 1000;
+  // 記録に「終わった時刻」とカロリーを書き込んでおく（同じ時間のGPXとの重複判定・今日の合計に使う）
+  walk.track.t1 = now; walk.track.kcal = Math.round(walk.kcal * 10) / 10;
   let v = null;
   const e = walk.hist.find(x => x.t >= now - 60000);
   if (e && now - e.t >= 15000) v = (walk.dist - e.d) / ((now - e.t) / 1000);
@@ -105,22 +107,22 @@ function saveSession() {
   } catch (e) {}
 }
 function saveNow() { if (walk) { saveTracks(); saveSession(); } }
-document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'hidden') saveNow(); else applyWake(); });
+document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'hidden') saveNow(); else { applyWake(); updToday(); } });
 window.addEventListener('pagehide', saveNow);
 // 歩行中にページを閉じたり戻ったりしようとしたら確認を出す
 window.addEventListener('beforeunload', e => { if (walk) { saveNow(); e.preventDefault(); e.returnValue = ''; } });
 function startWalk(prev) {
   walk = Object.assign({t0: Date.now(), dist: 0, kcal: 0, up: 0, track: null}, prev || {}, {eRef: null, last: null, hist: []});
-  if (!walk.track) { walk.track = {k: 'walk', t0: walk.t0, pts: []}; tracks.push(walk.track); }
+  if (!walk.track) { walk.track = {k: 'walk', t0: walk.t0, t1: walk.t0, kcal: 0, pts: []}; tracks.push(walk.track); }
   document.body.classList.add('walking'); document.body.classList.remove('menu');
   $('menuBtn').textContent = '▲メニュー';
   $('result').textContent = '';
   resizeSoon(); setFollow(true);
   clearInterval(hudTimer);
   let n = 0;
-  hudTimer = setInterval(() => { renderHud(); if (++n % 6 === 0) { saveTracks(); saveSession(); } }, 5000);
+  hudTimer = setInterval(() => { renderHud(); if (++n % 6 === 0) { saveTracks(); saveSession(); updToday(); } }, 5000);
   saveSession();
-  renderHud();
+  renderHud(); updToday();
 }
 $('walkBtn').onclick = () => { if (!walk) startWalk(); };
 // 30分以内に開き直したら、歩行を続きから再開する
@@ -142,7 +144,7 @@ function restoreSession() {
     setData('route', line(route.coords)); updWalkBtn();
   }
   let track = tracks.find(t => t.k === 'walk' && t.t0 === s.t0);
-  if (!track) { track = {k: 'walk', t0: s.t0, pts: []}; tracks.push(track); }
+  if (!track) { track = {k: 'walk', t0: s.t0, t1: s.t0, kcal: 0, pts: []}; tracks.push(track); }
   startWalk({t0: s.t0, dist: s.dist, kcal: s.kcal, up: s.up || 0, track, note: '前回の歩行を続きから再開しました', noteUntil: Date.now() + 20000});
   status('前回の歩行を続きから再開しました');
 }
@@ -194,6 +196,7 @@ $('endBtn').onclick = () => {
   const el = (Date.now() - walk.t0) / 1000;
   const avg = el > 0 ? walk.dist / el * 3.6 : 0;
   $('result').textContent = `今回の歩行：${fmtTime(el)}・${fmtDist(walk.dist)}・平均${avg.toFixed(1)}km/h・${walk.up >= 1 ? `上り約${Math.round(walk.up)}m・` : ''}${Math.round(walk.kcal)}kcal`;
+  walk.track.t1 = Date.now(); walk.track.kcal = Math.round(walk.kcal * 10) / 10;
   if (walk.track.pts.length < 2) tracks = tracks.filter(t => t !== walk.track);
   saveTracks();
   clearInterval(hudTimer); clearTimeout(followTimer); walk = null;
@@ -218,30 +221,104 @@ function splitLines(pts, gap) {
   if (cur.length > 1) out.push(cur);
   return out;
 }
+// ---------- 記録の整理（元の記録はそのまま。表示と集計だけ整理する） ----------
+const OFF_M = 30;
+// 点ごとの状態：0＝道のデータの範囲外、1＝歩いた道の上、2＝道の近くだが歩いた道とは重ならない、3＝道から30m以上外れた
+function ptState(pts) {
+  const g = graph;
+  return pts.map(p => {
+    if (!g || !judgeable(g, p)) return 0;
+    if (!roadIdx(g).near(p, OFF_M)) return 3;
+    return walkedIdx(g).near(p, 20) ? 1 : 2;
+  });
+}
+// 1本の歩行記録を整理する：そのまま描く線・外れた線・整理後の距離
+function cleanTrack(t) {
+  const pts = t.pts, st = ptState(pts), raw = [], off = [];
+  let cur = null, curO = null, dist = 0, rawDist = 0, offDist = 0;
+  for (let i = 1; i < pts.length; i++) {
+    const a = pts[i - 1], b = pts[i], d = distM(a, b);
+    let kind;
+    if (d > 80) kind = 'gap';                                   // 記録が途切れた所は線を引かない
+    else if (st[i - 1] === 3 || st[i] === 3) kind = 'off';     // 道から外れた
+    else if (st[i - 1] === 1 && st[i] === 1) kind = 'edge';    // 歩いた道として1本で描くので、記録の線は描かない
+    else kind = 'raw';
+    if (kind !== 'gap') rawDist += d;
+    if (kind === 'off') offDist += d; else if (kind !== 'gap') dist += d;
+    if (kind === 'raw') { if (!cur) { cur = [a]; raw.push(cur); } cur.push(b); } else cur = null;
+    if (kind === 'off') { if (!curO) { curO = [a]; off.push(curO); } curO.push(b); } else curO = null;
+  }
+  return {raw, off, dist, rawDist, offDist};
+}
 function drawTracks() {
-  const fw = [], fv = []; let lw = 0, lv = 0;
+  const fw = [], fv = [], fo = []; let lw = 0, lv = 0, lo = 0, lu = 0;
   tracks.forEach(t => {
     if (!t.pts || t.pts.length < 2) return;
-    const veh = t.k === 'veh';
-    // 乗り物の区間は、記録が途切れた地点どうしを直線で結ぶこともあるので分けない
-    splitLines(t.pts, veh ? Infinity : 80).forEach(c => {
-      const L = cumOf(c)[c.length - 1];
-      if (veh) { lv += L; fv.push(line(c)[0]); } else { lw += L; fw.push(line(c)[0]); }
-    });
+    // 乗り物の区間は、記録が途切れた地点どうしを直線で結ぶこともあるので、そのまま描く
+    if (t.k === 'veh') { lv += cumOf(t.pts)[t.pts.length - 1]; fv.push(line(t.pts)[0]); return; }
+    const c = cleanTrack(t);
+    lw += c.dist; lo += c.offDist;
+    c.raw.forEach(l => fw.push(line(l)[0]));
+    c.off.forEach(l => fo.push(line(l)[0]));
+  });
+  // 道のデータを読み込んだ範囲では、歩いたことのある道を1本ずつ描く（何度歩いても線は1本）
+  if (graph) graph.edges.forEach(e => {
+    if (!e.k) return;
+    lu += e.w;
+    fw.push(line([[graph.lon[e.a], graph.lat[e.a]], [graph.lon[e.b], graph.lat[e.b]]])[0]);
   });
   setData('walked', $('walkedChk').checked ? fw : []);
   setData('veh', $('vehChk').checked ? fv : []);
+  setData('off', $('walkedChk').checked && $('offChk').checked ? fo : []);
   const pct = Math.round(JSON.stringify(tracks).length / 5000000 * 100);
-  $('recStat').textContent = `保存済み：歩行 ${(lw / 1000).toFixed(1)}km・乗り物 ${(lv / 1000).toFixed(1)}km（保存容量の約${pct}%）`;
+  $('recStat').innerHTML = `保存済み：歩行 ${(lw / 1000).toFixed(1)}km${lo >= 50 ? `（道から外れた${(lo / 1000).toFixed(1)}kmは除く）` : ''}・乗り物 ${(lv / 1000).toFixed(1)}km（保存容量の約${pct}%）` +
+    (graph ? `<br>いま読み込んでいる範囲で歩いた道の長さ：${(lu / 1000).toFixed(1)}km（同じ道は1回と数える）` : '');
   if (pct >= 80) showErr('記録の保存容量が残り少なくなっています。「記録を書き出す」で控えを取ってください');
+  updToday();
+}
+// 今日（0時から）の合計。日付をまたいだ記録は始めた日に入れる。乗り物の区間は入れない
+function todayStats() {
+  const d0 = new Date(); d0.setHours(0, 0, 0, 0);
+  let dist = 0, sec = 0, kcal = 0;
+  tracks.forEach(t => {
+    if (t.k === 'veh' || !t.pts || t.pts.length < 2 || !(t.t0 >= d0.getTime())) return;
+    const c = cleanTrack(t), r = c.rawDist > 0 ? c.dist / c.rawDist : 1;
+    const end = walk && t === walk.track ? Date.now() : t.t1;
+    const s = end > t.t0 ? (end - t.t0) / 1000 : c.rawDist / (SPEED / 60); // 終わった時刻がない古い記録は分速80mで見積もる
+    dist += c.dist; sec += s;
+    // アプリの記録は歩きながら計算したカロリー（坂の上りも含む）、GPXは平均の速さと時間から計算。どちらも外れた分は差し引く
+    if (typeof t.kcal === 'number') kcal += t.kcal * r;
+    else kcal += mets(c.rawDist / Math.max(s, 1) * 3.6) * weight() * s / 3600 * 1.05 * r;
+  });
+  return {dist, sec, kcal};
+}
+function updToday() {
+  const s = todayStats();
+  $('today').textContent = s.dist >= 1 ? `今日：${fmtDist(s.dist)}・${fmtTime(s.sec)}・${Math.round(s.kcal)}kcal` : '今日：まだ歩いた記録がありません';
 }
 function afterTracksChanged() {
-  drawTracks();
   if (graph) markWalked(graph);
+  drawTracks();
   if (route && cands[candIdx] && cands[candIdx].idx && graph) { route.ur = unexpRatio(graph, cands[candIdx].idx); showSummary(); }
 }
 $('walkedChk').onchange = drawTracks;
 $('vehChk').onchange = drawTracks;
+$('offChk').addEventListener('change', drawTracks);
+// GPXと同じ時間帯のアプリの記録を消す（OpenTracksは画面を消しても途切れないので、そちらを残す）
+function dropDup(parts) {
+  const sp = parts.filter(p => p.t1 > p.t0).map(p => [p.t0, p.t1]);
+  if (!sp.length) return 0;
+  const cur = walk && walk.track, before = tracks.length;
+  tracks = tracks.filter(t => {
+    if (t.src || t.k === 'veh' || t === cur) return true;
+    if (t.t1 > t.t0) { // 時間の半分以上がGPXと重なっていたら同じ散歩とみなす
+      const ov = sp.reduce((s, [a, b]) => s + Math.max(0, Math.min(b, t.t1) - Math.max(a, t.t0)), 0);
+      return ov < (t.t1 - t.t0) * 0.5;
+    }
+    return !sp.some(([a, b]) => t.t0 >= a && t.t0 <= b); // 終わった時刻がない古い記録は、始めた時刻で判定
+  });
+  return before - tracks.length;
+}
 
 // ---------- GPXの読み込み ----------
 function parseGpx(txt) {
@@ -300,7 +377,7 @@ function processSeg(raw, src) {
       const a = run[run.length - 1], dt = (x.t - a.t) / 1000, d = distM(a.p, x.p);
       if (isFinite(dt) && d > 300 && d / dt > VEH_MS) {
         runs.push(run); run = [];
-        out.push({k: 'veh', t0: a.t, src, pts: [roundP(a.p), roundP(x.p)]});
+        out.push({k: 'veh', t0: a.t, t1: x.t, src, pts: [roundP(a.p), roundP(x.p)]});
       } else if (isFinite(dt) && dt > 300) { runs.push(run); run = []; }
     }
     run.push(x);
@@ -312,7 +389,8 @@ function processSeg(raw, src) {
     for (let i = 1; i <= r.length; i++) {
       if (i === r.length || cls[i] !== cls[s]) {
         const part = r.slice(s, Math.min(i + 1, r.length));
-        if (part.length >= 2) out.push({k: cls[s], t0: isFinite(part[0].t) ? part[0].t : Date.now(), src, pts: thin(part.map(x => x.p), cls[s] === 'veh' ? 50 : 15)});
+        const te = part[part.length - 1].t;
+        if (part.length >= 2) out.push({k: cls[s], t0: isFinite(part[0].t) ? part[0].t : Date.now(), t1: isFinite(te) ? te : undefined, src, pts: thin(part.map(x => x.p), cls[s] === 'veh' ? 50 : 15)});
         s = i;
       }
     }
@@ -327,7 +405,10 @@ function importBackup(txt) {
   arr.forEach(t => {
     if (!t || !Array.isArray(t.pts) || t.pts.length < 2) return;
     if (have.has(key(t))) return;
-    tracks.push({k: t.k === 'veh' ? 'veh' : 'walk', t0: t.t0, src: t.src, pts: t.pts}); have.add(key(t)); n++;
+    const o = {k: t.k === 'veh' ? 'veh' : 'walk', t0: t.t0, src: t.src, pts: t.pts};
+    if (typeof t.t1 === 'number') o.t1 = t.t1;
+    if (typeof t.kcal === 'number') o.kcal = t.kcal;
+    tracks.push(o); have.add(key(t)); n++;
   });
   return n;
 }
@@ -336,7 +417,7 @@ $('recFile').onchange = async () => {
   const files = [...$('recFile').files]; $('recFile').value = '';
   if (!files.length) return;
   status('記録を読み込み中…'); await pause();
-  let added = 0, replaced = 0, bad = 0;
+  let added = 0, replaced = 0, bad = 0, dup = 0;
   for (const f of files) {
     try {
       const txt = await f.text();
@@ -347,11 +428,11 @@ $('recFile').onchange = async () => {
       if (tracks.length < before) replaced++;
       // OpenTracksはGPSが途切れると区切り（trkseg）を分けるので、1本につなげてから判定する
       const all = segs.flat();
-      if (all.length >= 2) { const o = processSeg(all, f.name); tracks.push(...o); added += o.length; }
+      if (all.length >= 2) { const o = processSeg(all, f.name); dup += dropDup(o); tracks.push(...o); added += o.length; }
     } catch (e) { bad++; showErr(`${f.name}：${e.message}`); }
   }
   saveTracks(); afterTracksChanged();
-  status(`読み込み完了：${files.length - bad}ファイル（区間 ${added}件${replaced ? `、${replaced}ファイルは前回分を置き換え` : ''}）`);
+  status(`読み込み完了：${files.length - bad}ファイル（区間 ${added}件${replaced ? `、${replaced}ファイルは前回分を置き換え` : ''}${dup ? `、同じ時間のアプリの記録${dup}件を削除` : ''}）`);
 };
 $('recExport').onclick = () => {
   const d = new Date(), ymd = `${d.getFullYear()}${String(d.getMonth() + 1).padStart(2, '0')}${String(d.getDate()).padStart(2, '0')}`;
