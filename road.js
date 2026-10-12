@@ -64,6 +64,7 @@ async function ensureGraph(need, fetchBB) {
   graph = buildGraph(els); graph.bb = bb; graph.from = from; graph.areaId = areaId;
   markWalked(graph);
   drawNet(); drawPois(); drawTracks();
+  ensurePois(graph, true).then(() => updStamps()).catch(() => {}); // スタンプ帳のために神社・寺・公園も用意（失敗しても続ける）
 }
 // 起動直後に、現在地の周りの道のデータを先に用意しておく
 async function prefetch() {
@@ -183,6 +184,13 @@ function segIndex(bb, segs) {
       if (l) for (const s of l) if (segDist(p, s[0], s[1]).d <= r) return true;
     }
     return false;
+  }, all(p, r) { // 近くにある線分をすべて返す
+    const [cx, cy] = cell(p), R = Math.ceil(r / C), out = new Set();
+    for (let dx = -R; dx <= R; dx++) for (let dy = -R; dy <= R; dy++) {
+      const l = grid.get((cx + dx) + ',' + (cy + dy));
+      if (l) for (const s of l) if (segDist(p, s[0], s[1]).d <= r) out.add(s);
+    }
+    return [...out];
   }};
 }
 // すべての道（通れない道も含む）
