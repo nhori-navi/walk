@@ -122,6 +122,7 @@ function startWalk(prev) {
   clearInterval(hudTimer);
   let n = 0;
   hudTimer = setInterval(() => { renderHud(); if (++n % 6 === 0) { saveTracks(); saveSession(); updToday(); playLive(); } }, 5000);
+  wakeOn = true; applyWake(); // 記録を始めたら画面ONを「入」にする
   saveSession();
   renderHud(); updToday();
 }
