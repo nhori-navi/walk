@@ -22,15 +22,15 @@ function nearNode(g, p, maxD) {
   return bi < 0 ? null : bi;
 }
 // 道のデータと同じ範囲の神社・寺・公園を用意する（端末に保存して使い回す）
-function ensurePois(g) {
-  if (!g.poiP) g.poiP = loadPois(g).catch(e => { g.poiP = null; throw e; }); // 同時に呼ばれても取得は1回だけ
+function ensurePois(g, quiet) {
+  if (!g.poiP) g.poiP = loadPois(g, quiet).catch(e => { g.poiP = null; throw e; }); // 同時に呼ばれても取得は1回だけ
   return g.poiP;
 }
-async function loadPois(g) {
+async function loadPois(g, quiet) {
   let els = null;
   if (g.areaId) { try { els = await cacheGet('p' + g.areaId); } catch (e) {} }
   if (!els) {
-    status('神社・寺・公園のデータを取得中…'); await pause();
+    if (!quiet) { status('神社・寺・公園のデータを取得中…'); await pause(); }
     const box = bboxStr(g.bb);
     els = await overpass(`[out:json][timeout:60];(nwr["amenity"="place_of_worship"]["religion"~"^(shinto|buddhist)$"](${box});nwr["leisure"~"^(park|garden)$"](${box}););out tags center;`);
     if (g.areaId) { try { await cachePut('p' + g.areaId, els); } catch (e) {} }
@@ -45,6 +45,7 @@ async function loadPois(g) {
     const node = nearNode(g, c, 150); if (node === null) continue; // 近くに歩ける道がない場所は除く
     out.push({kind, name, p: c, node});
   }
+  g.poiList = out; // スタンプ帳で使う
   return out;
 }
 // 行ったことがあるか（最寄りの道を歩いた記録があるか）
