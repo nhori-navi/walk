@@ -14,7 +14,7 @@ $('weight').value = localStorage.getItem('walk_weight') || '60';
 $('weight').onchange = () => { try { localStorage.setItem('walk_weight', $('weight').value); } catch (e) {} };
 const weight = () => { const w = Number($('weight').value); return w > 0 ? w : 60; };
 function loadFlag(k, d) { try { const v = localStorage.getItem(k); return v === null ? d : v === '1'; } catch (e) { return d; } }
-[['vibChk', 'walk_vib', true], ['autoFollowChk', 'walk_autofollow', true], ['offChk', 'walk_offshow', false]].forEach(([id, k, d]) => {
+[['vibChk', 'walk_vib', true], ['autoFollowChk', 'walk_autofollow', true], ['offChk', 'walk_offshow', false], ['meshChk', 'walk_meshshow', false]].forEach(([id, k, d]) => {
   $(id).checked = loadFlag(k, d);
   $(id).onchange = () => { try { localStorage.setItem(k, $(id).checked ? '1' : '0'); } catch (e) {} };
 });
