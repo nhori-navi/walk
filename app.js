@@ -9,7 +9,8 @@ map.addControl(new mapboxgl.NavigationControl(), 'top-right');
 // ---------- 地図の準備 ----------
 map.on('load', () => {
   const empty = {type:'FeatureCollection', features:[]};
-    ['off', 'walked', 'veh', 'net', 'cmp', 'route', 'poi'].forEach(id => map.addSource(id, {type:'geojson', data:empty}));
+    ['mesh', 'off', 'walked', 'veh', 'net', 'cmp', 'route', 'poi'].forEach(id => map.addSource(id, {type:'geojson', data:empty}));
+  map.addLayer({id:'mesh', type:'fill', source:'mesh', paint:{'fill-color':'#f39c12', 'fill-opacity':0.22, 'fill-outline-color':'#e67e22'}});
   map.addLayer({id:'off', type:'line', source:'off',
     paint:{'line-color':'#888', 'line-width':2.5, 'line-dasharray':[1, 2], 'line-opacity':0.7}});
   map.addLayer({id:'walked', type:'line', source:'walked', layout:{'line-cap':'round', 'line-join':'round'},
