@@ -34,6 +34,7 @@ function walkStep(c) {
       }
     }
   }
+  if (c.accuracy <= 50) stampLive(p);
   walk.hist.push({t: now, d: walk.dist});
   while (walk.hist.length && walk.hist[0].t < now - 120000) walk.hist.shift();
   renderHud();
@@ -120,7 +121,7 @@ function startWalk(prev) {
   resizeSoon(); setFollow(true);
   clearInterval(hudTimer);
   let n = 0;
-  hudTimer = setInterval(() => { renderHud(); if (++n % 6 === 0) { saveTracks(); saveSession(); updToday(); } }, 5000);
+  hudTimer = setInterval(() => { renderHud(); if (++n % 6 === 0) { saveTracks(); saveSession(); updToday(); playLive(); } }, 5000);
   saveSession();
   renderHud(); updToday();
 }
@@ -232,9 +233,9 @@ function ptState(pts) {
     return walkedIdx(g).near(p, 20) ? 1 : 2;
   });
 }
-// 1本の歩行記録を整理する：そのまま描く線・外れた線・整理後の距離
+// 1本の歩行記録を整理する：そのまま描く線・外れた線・整理後の距離・数える線分
 function cleanTrack(t) {
-  const pts = t.pts, st = ptState(pts), raw = [], off = [];
+  const pts = t.pts, st = ptState(pts), raw = [], off = [], segs = [];
   let cur = null, curO = null, dist = 0, rawDist = 0, offDist = 0;
   for (let i = 1; i < pts.length; i++) {
     const a = pts[i - 1], b = pts[i], d = distM(a, b);
@@ -244,19 +245,19 @@ function cleanTrack(t) {
     else if (st[i - 1] === 1 && st[i] === 1) kind = 'edge';    // 歩いた道として1本で描くので、記録の線は描かない
     else kind = 'raw';
     if (kind !== 'gap') rawDist += d;
-    if (kind === 'off') offDist += d; else if (kind !== 'gap') dist += d;
+    if (kind === 'off') offDist += d; else if (kind !== 'gap') { dist += d; segs.push([a, b]); }
     if (kind === 'raw') { if (!cur) { cur = [a]; raw.push(cur); } cur.push(b); } else cur = null;
     if (kind === 'off') { if (!curO) { curO = [a]; off.push(curO); } curO.push(b); } else curO = null;
   }
-  return {raw, off, dist, rawDist, offDist};
+  return {raw, off, dist, rawDist, offDist, segs};
 }
 function drawTracks() {
-  const fw = [], fv = [], fo = []; let lw = 0, lv = 0, lo = 0, lu = 0;
+  const fw = [], fv = [], fo = [], cleaned = []; let lw = 0, lv = 0, lo = 0, lu = 0;
   tracks.forEach(t => {
     if (!t.pts || t.pts.length < 2) return;
     // 乗り物の区間は、記録が途切れた地点どうしを直線で結ぶこともあるので、そのまま描く
     if (t.k === 'veh') { lv += cumOf(t.pts)[t.pts.length - 1]; fv.push(line(t.pts)[0]); return; }
-    const c = cleanTrack(t);
+    const c = cleanTrack(t); cleaned.push({t, c});
     lw += c.dist; lo += c.offDist;
     c.raw.forEach(l => fw.push(line(l)[0]));
     c.off.forEach(l => fo.push(line(l)[0]));
@@ -274,6 +275,7 @@ function drawTracks() {
   $('recStat').innerHTML = `保存済み：歩行 ${(lw / 1000).toFixed(1)}km${lo >= 50 ? `（道から外れた${(lo / 1000).toFixed(1)}kmは除く）` : ''}・乗り物 ${(lv / 1000).toFixed(1)}km（保存容量の約${pct}%）` +
     (graph ? `<br>いま読み込んでいる範囲で歩いた道の長さ：${(lu / 1000).toFixed(1)}km（同じ道は1回と数える）` : '');
   if (pct >= 80) showErr('記録の保存容量が残り少なくなっています。「記録を書き出す」で控えを取ってください');
+  updPlay(cleaned);
   updToday();
 }
 // 今日（0時から）の合計。日付をまたいだ記録は始めた日に入れる。乗り物の区間は入れない
@@ -410,6 +412,16 @@ function importBackup(txt) {
     if (typeof t.kcal === 'number') o.kcal = t.kcal;
     tracks.push(o); have.add(key(t)); n++;
   });
+  // スタンプ帳も合わせる（行った日は両方の分を足す）
+  if (o.stamps && typeof o.stamps === 'object') {
+    Object.entries(o.stamps).forEach(([k, s]) => {
+      if (!s || !Array.isArray(s.days)) return;
+      const m = stamps[k];
+      if (!m) stamps[k] = s;
+      else { m.first = Math.min(m.first, s.first); s.days.forEach(d => { if (!m.days.includes(d)) m.days.push(d); }); }
+    });
+    saveStamps(); drawStampList();
+  }
   return n;
 }
 $('recImport').onclick = () => $('recFile').click();
@@ -436,7 +448,7 @@ $('recFile').onchange = async () => {
 };
 $('recExport').onclick = () => {
   const d = new Date(), ymd = `${d.getFullYear()}${String(d.getMonth() + 1).padStart(2, '0')}${String(d.getDate()).padStart(2, '0')}`;
-  const blob = new Blob([JSON.stringify({app: 'walk', v: 1, tracks})], {type: 'application/json'});
+  const blob = new Blob([JSON.stringify({app: 'walk', v: 1, tracks, stamps})], {type: 'application/json'});
   const a = document.createElement('a');
   a.href = URL.createObjectURL(blob); a.download = `walk-records-${ymd}.json`;
   document.body.appendChild(a); a.click(); a.remove();
