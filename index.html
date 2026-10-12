@@ -88,6 +88,18 @@ body.walking.menu #panel{display:block;top:50%;bottom:52px;left:0;right:0;width:
     <span class="lg" style="background:#8a9a9a"></span>通れる道<span class="lg" style="background:#f39c12"></span>階段<span class="lg" style="background:#9b59b6"></span>つながっていない道<span class="lg" style="background:#e74c3c"></span>通行不可の印</div>
   <div id="status" class="small">現在地を取得中…</div>
   <div id="err" class="small" style="color:#c00"></div>
+    <details>
+    <summary id="playSum">あそぶ（踏破マス・スタンプ帳・東海道）</summary>
+    <div id="meshStat" class="row"></div>
+    <div class="small"><label><input type="checkbox" id="meshChk">地図に踏破マスを表示（約125m四方。国の地域メッシュの区切り）</label></div>
+    <div class="row" style="margin-top:10px">🏯 バーチャル東海道（日本橋→京都三条大橋 約495km）</div>
+    <div id="tkText" class="small" style="color:#333;line-height:1.6"></div>
+    <div style="background:#eee;border-radius:4px;height:8px;margin:4px 0"><div id="tkBar" style="background:#e67e22;height:8px;border-radius:4px;width:0"></div></div>
+    <button id="tkReset">最初からやり直す</button>
+    <div id="stampStat" class="row" style="margin-top:10px"></div>
+    <div class="small">名前のある神社・寺・公園の50m以内を通るとスタンプが押されます（神社・寺・公園のデータを読み込んだ範囲だけ）。名前をタップすると地図で場所を表示します。</div>
+    <div id="stampList" style="max-height:220px;overflow:auto;border:1px solid #eee;border-radius:4px"></div>
+  </details>
   <details>
     <summary>歩いた記録の管理</summary>
     <div class="small">OpenTracksのGPXファイル（Download/opentracks）を選んでください（複数可）。同じファイルを読み込み直すと、前回分を置き換えます。同じ時間帯にこのアプリで取った記録があれば、そちらは消してOpenTracksの記録を残します。書き出したファイル（.json）を選ぶと、記録を復元できます。</div>
@@ -123,11 +135,12 @@ window.addEventListener('error', e => {
   if (el) el.textContent = el.textContent ? el.textContent + ' ／ ' + m : m;
 }, true);
 </script>
-<script src="config.js?v=3"></script>
-<script src="base.js?v=3"></script>
-<script src="road.js?v=3"></script>
-<script src="poi.js?v=3"></script>
-<script src="walk.js?v=3"></script>
-<script src="app.js?v=3"></script>
+<script src="config.js?v=4"></script>
+<script src="base.js?v=4"></script>
+<script src="road.js?v=4"></script>
+<script src="poi.js?v=4"></script>
+<script src="walk.js?v=4"></script>
+<script src="play.js?v=4"></script>
+<script src="app.js?v=4"></script>
 </body>
 </html>
