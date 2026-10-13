@@ -16,14 +16,20 @@ function meshOfSegs(segs, add) {
     for (let i = 0; i <= n; i++) add(meshKey([a[0] + (b[0] - a[0]) * i / n, a[1] + (b[1] - a[1]) * i / n]));
   });
 }
-function meshPoly(k) {
-  const [y, x] = k.split('_').map(Number), s = y * MESH_Y, w = 100 + x * MESH_X, n = s + MESH_Y, e = w + MESH_X;
-  return {type: 'Feature', properties: {}, geometry: {type: 'Polygon', coordinates: [[[w, s], [e, s], [e, n], [w, n], [w, s]]]}};
+function meshBB(k) {
+  const [y, x] = k.split('_').map(Number), s = y * MESH_Y, w = 100 + x * MESH_X;
+  return {s, w, n: s + MESH_Y, e: w + MESH_X};
+}
+// c：'w'＝歩いた、'near'＝残り200m以下、'done'＝完全制覇
+function meshPoly(k, c) {
+  const {s, w, n, e} = meshBB(k);
+  return {type: 'Feature', properties: {k, c: c || 'w'}, geometry: {type: 'Polygon', coordinates: [[[w, s], [e, s], [e, n], [w, n], [w, s]]]}};
 }
 // 歩行中の記録を除いた分（記録が変わったときにまとめて計算しておき、歩行中は今の記録だけ足す）
 let meshBase = new Map(), playCleaned = [], playDist = 0, meshCount = 0;
 function updPlay(cleaned) {
   playCleaned = cleaned;
+  updMesh(false);
   const cur = walk && walk.track, from = tkFrom();
   meshBase = new Map(); playDist = 0;
   cleaned.forEach(({t, c}) => {
@@ -45,12 +51,133 @@ function playLive() {
   const d0 = new Date(); d0.setHours(0, 0, 0, 0);
   let today = 0; cells.forEach(v => { if (v >= d0.getTime()) today++; });
   meshCount = cells.size;
-  $('meshStat').textContent = `踏破マス：${cells.size}個（今日 新しく${today}個）`;
-  setData('mesh', $('meshChk').checked ? [...cells.keys()].map(meshPoly) : []);
+  if (walk) meshLive(); // 歩行中は、いま歩いている記録の分だけ「歩いた道」の印を足して完全制覇を調べる
+  const doneN = Object.keys(meshDone).length;
+  $('meshStat').textContent = `踏破マス：${cells.size}個（今日 新しく${today}個）・🏆完全制覇 ${doneN}個`;
+  if ($('meshChk').checked) {
+    const f = [...cells.keys()].map(k => meshPoly(k, meshClass(k)));
+    Object.keys(meshDone).forEach(k => { if (!cells.has(k)) f.push(meshPoly(k, 'done')); });
+    setData('mesh', f);
+  } else setData('mesh', []);
   updTokaido(dist);
   updPlaySum();
 }
-$('meshChk').addEventListener('change', playLive);
+$('meshChk').addEventListener('change', () => { playLive(); showMeshRem(); });
+
+// ---------- マスの完全制覇（版6）：マスの中の道を全部歩いたら金色 ----------
+const DONE_M = 30, NEAR_M = 200; // 残り30m未満で完全制覇、残り200m以下は「あと少し」
+let meshDone = loadJSON('walk_meshdone', '{}'); // {マス: 完全制覇した時刻}。道が書き足されても外さない
+const saveMeshDone = () => lsSet('walk_meshdone', JSON.stringify(meshDone));
+let meshInfo = new Map(); // 道のデータの範囲に丸ごと入るマス：{L：道の長さ, W：歩いた長さ, rem：まだ歩いていない道の線}
+let meshSel = null, meshPopup = null;
+const meshRest = m => Math.max(0, m.L - m.W);
+function meshClass(k) {
+  if (meshDone[k]) return 'done';
+  const m = meshInfo.get(k);
+  return m && m.W > 0 && meshRest(m) <= NEAR_M ? 'near' : 'w';
+}
+// マスごとに、数える道の長さと歩いた長さを出す（道を10mごとに区切って、どのマスにあるかを見る）
+function calcMesh(g) {
+  const out = new Map();
+  if (!g) return out;
+  g.edges.forEach(e => {
+    if (e.x || g.comp[e.a] !== g.main) return; // 歩道の別線・横断歩道・駐車場の通路・つながっていない道は数えない
+    const A = [g.lon[e.a], g.lat[e.a]], B = [g.lon[e.b], g.lat[e.b]], n = Math.max(1, Math.ceil(e.w / 10)), step = e.w / n;
+    const at = t => [A[0] + (B[0] - A[0]) * t, A[1] + (B[1] - A[1]) * t];
+    let curK = null, ln = null;
+    for (let i = 0; i < n; i++) {
+      const k = meshKey(at((i + 0.5) / n));
+      let m = out.get(k); if (!m) { m = {L: 0, W: 0, rem: []}; out.set(k, m); }
+      m.L += step;
+      if (e.k) { m.W += step; continue; }
+      if (k === curK && ln) ln.push(at((i + 1) / n));
+      else { ln = [at(i / n), at((i + 1) / n)]; m.rem.push(ln); curK = k; }
+    }
+  });
+  const bb = g.bb;
+  for (const k of [...out.keys()]) { const b = meshBB(k); if (b.s < bb.s || b.n > bb.n || b.w < bb.w || b.e > bb.e) out.delete(k); }
+  out.forEach(m => { m.rem = joinLines(m.rem); });
+  return out;
+}
+// 端がつながっている線を1本にまとめる（「残りの道 ○本」を数えるため）
+function joinLines(ls) {
+  const same = (p, q) => Math.abs(p[0] - q[0]) < 1e-9 && Math.abs(p[1] - q[1]) < 1e-9;
+  ls = ls.map(l => l.slice());
+  for (let ch = true; ch;) {
+    ch = false;
+    for (let i = 0; i < ls.length && !ch; i++) for (let j = 0; j < ls.length && !ch; j++) {
+      if (i === j) continue;
+      const a = ls[i], b = ls[j];
+      if (same(a[a.length - 1], b[0])) { ls[i] = a.concat(b.slice(1)); ls.splice(j, 1); ch = true; }
+      else if (same(a[a.length - 1], b[b.length - 1])) { ls[i] = a.concat(b.slice(0, -1).reverse()); ls.splice(j, 1); ch = true; }
+    }
+  }
+  return ls;
+}
+// 完全制覇の判定（live＝歩行中。そのときは1つずつ知らせる）
+function updMesh(live) {
+  meshInfo = calcMesh(graph);
+  const now = Date.now(), neu = [];
+  meshInfo.forEach((m, k) => { if (m.L > 0 && m.W > 0 && meshRest(m) < DONE_M && !meshDone[k]) { meshDone[k] = now; neu.push(k); } });
+  if (neu.length) {
+    saveMeshDone();
+    const n = Object.keys(meshDone).length;
+    if (live) notify(`🏆 マスを完全制覇！（${n}個目）`);
+    else status(`🏆 完全制覇のマスが新しく${neu.length}個になりました（合計${n}個）`);
+  }
+  drawNearList(); showMeshRem();
+}
+// 歩行中：前に調べたところから先の記録の点で「歩いた道」の印を足す
+function meshLive() {
+  const t = walk && walk.track; if (!t || !graph) return;
+  const from = Math.max(0, (walk.meshIdx || 0) - 1);
+  if (t.pts.length - from < 2) return;
+  const ch = markWalkedPts(graph, t.pts.slice(from));
+  walk.meshIdx = t.pts.length;
+  if (ch) updMesh(true);
+}
+// マスの説明（タップしたとき・歩行中の左上）
+function meshText(k, short) {
+  const m = meshInfo.get(k), d = meshDone[k];
+  if (d) return short ? 'このマス：🏆完全制覇' : `🏆 完全制覇（${ymd(d).replace(/-/g, '/')}）`;
+  if (!m) return short ? '' : (graph ? 'このマスには数える道がないか、道のデータを読み込んだ範囲の外です' : '道のデータを読み込むと、このマスの残りが分かります');
+  const r = meshRest(m);
+  if (short) return `このマス：あと${fmtDist(r)}`;
+  return `このマスはあと${fmtDist(r)}（残りの道 ${m.rem.length}本・歩いた割合 ${Math.round(m.W / m.L * 100)}%）` + (m.W ? '' : '<br>まだ歩いていないマスです');
+}
+const meshHud = () => (walk && pos && !isRough() && graph) ? meshText(meshKey(pos), true) : '';
+// まだ歩いていない道を赤い点線で（タップしたマス、または歩行中に今いるマス）
+function showMeshRem() {
+  if (!$('meshChk').checked) { setData('meshRem', []); return; }
+  const k = meshSel || (walk && pos && !isRough() ? meshKey(pos) : null), m = k && meshInfo.get(k);
+  setData('meshRem', m && !meshDone[k] ? m.rem.map(l => line(l)[0]) : []);
+}
+function showMeshAt(p) {
+  const k = meshKey(p); meshSel = k; showMeshRem();
+  if (meshPopup) meshPopup.remove();
+  meshPopup = new mapboxgl.Popup({closeButton: true}).setLngLat(p).setHTML(meshText(k)).addTo(map);
+  if (meshPopup.on) meshPopup.on('close', () => { if (meshSel === k) { meshSel = null; showMeshRem(); } });
+}
+// あと少しのマス（残り200m以下、近い順に5つ）
+function drawNearList() {
+  const c = pos && !isRough() ? pos : origin() || map.getCenter().toArray();
+  const arr = [];
+  meshInfo.forEach((m, k) => {
+    if (meshDone[k] || !m.W || meshRest(m) > NEAR_M) return;
+    const b = meshBB(k), ctr = [(b.w + b.e) / 2, (b.s + b.n) / 2];
+    arr.push({k, ctr, r: meshRest(m), d: distM(c, ctr)});
+  });
+  arr.sort((a, b) => a.d - b.d);
+  const top = arr.slice(0, 5);
+  $('nearList').innerHTML = top.length ? top.map((x, i) =>
+    `<div class="hit" data-i="${i}" style="padding:5px 8px">あと${fmtDist(x.r)}で完全制覇<span class="small">　ここから約${fmtDist(x.d)}</span></div>`).join('')
+    : `<div class="small" style="padding:4px">${graph ? '道のデータを読み込んだ範囲に、残り200m以下のマスはありません' : '道のデータを読み込むと表示されます'}</div>`;
+  $('nearList').querySelectorAll('[data-i]').forEach(el => el.onclick = () => {
+    const x = top[Number(el.dataset.i)];
+    if (!$('meshChk').checked) { $('meshChk').checked = true; $('meshChk').dispatchEvent(new Event('change')); }
+    setFollow(false); map.easeTo({center: x.ctr, zoom: 17}); showMeshAt(x.ctr);
+  });
+}
 
 // ---------- バーチャル東海道（宿場間の距離は川口市の資料の「おおよその距離」による。出典は画面に表示） ----------
 const TOKAIDO = [['日本橋', 0], ['品川宿', 7.9], ['川崎宿', 17.7], ['神奈川宿', 27.5], ['保土ヶ谷宿', 32.4], ['戸塚宿', 41.2], ['藤沢宿', 49.1],
@@ -79,6 +206,7 @@ function updTokaido(m) {
     notify(`🏯 ${n > 1 ? `宿場を${n}つ進んで、` : ''}${here}に着きました！`);
   }
   if (last === null || prog !== Number(last)) lsSet('walk_tokaido_last', String(prog));
+  if (typeof tkRefresh === 'function') tkRefresh(); // 東海道の地図を開いていれば描き直す
 }
 twoStep($('tkReset'), '最初からやり直す', () => {
   lsSet('walk_tokaido_from', String(Date.now())); lsSet('walk_tokaido_last', '0');
@@ -144,5 +272,5 @@ function drawStampList() {
   updPlaySum();
 }
 function updPlaySum() {
-  $('playSum').textContent = `あそぶ（踏破マス ${meshCount}・スタンプ ${Object.keys(stamps).length}・東海道 ${tkKm.toFixed(1)}km）`;
+  $('playSum').textContent = `あそぶ（踏破マス ${meshCount}・完全制覇 ${Object.keys(meshDone).length}・スタンプ ${Object.keys(stamps).length}・東海道 ${tkKm.toFixed(1)}km）`;
 }

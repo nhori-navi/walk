@@ -13,8 +13,11 @@ map.on('load', () => {
   const empty = {type:'FeatureCollection', features:[]};
   map.addSource('acc', {type:'geojson', data:empty});
   map.addLayer({id:'acc', type:'fill', source:'acc', paint:{'fill-color':['get', 'c'], 'fill-opacity':0.13, 'fill-outline-color':['get', 'c']}});
-  ['mesh', 'off', 'walked', 'veh', 'net', 'cmp', 'route', 'poi'].forEach(id => map.addSource(id, {type:'geojson', data:empty}));
-  map.addLayer({id:'mesh', type:'fill', source:'mesh', paint:{'fill-color':'#f39c12', 'fill-opacity':0.22, 'fill-outline-color':'#e67e22'}});
+  ['mesh', 'off', 'walked', 'veh', 'net', 'cmp', 'route', 'poi', 'meshRem', 'tkLine', 'tkSt'].forEach(id => map.addSource(id, {type:'geojson', data:empty}));
+  // 踏破マス：歩いた＝オレンジ、残り200m以下＝濃いオレンジ、完全制覇＝金色
+  map.addLayer({id:'mesh', type:'fill', source:'mesh', paint:{
+    'fill-color':['match', ['get', 'c'], 'done', '#f1c40f', 'near', '#d35400', '#f39c12'],
+    'fill-opacity':['match', ['get', 'c'], 'done', 0.45, 'near', 0.3, 0.22], 'fill-outline-color':'#e67e22'}});
   map.addLayer({id:'off', type:'line', source:'off',
     paint:{'line-color':'#888', 'line-width':2.5, 'line-dasharray':[1, 2], 'line-opacity':0.7}});
   map.addLayer({id:'walked', type:'line', source:'walked', layout:{'line-cap':'round', 'line-join':'round'},
@@ -41,6 +44,18 @@ map.on('load', () => {
   map.addLayer({id:'poi', type:'circle', source:'poi', paint:{
     'circle-radius':6, 'circle-color':['match', ['get', 'k'], 'shrine', POI.shrine.col, 'temple', POI.temple.col, POI.park.col],
     'circle-stroke-color':'#fff', 'circle-stroke-width':2}});
+  // マスの中のまだ歩いていない道（赤い点線）
+  map.addLayer({id:'meshRem', type:'line', source:'meshRem', layout:{'line-cap':'round'},
+    paint:{'line-color':'#c0392b', 'line-width':4, 'line-dasharray':[1, 1.5]}});
+  // 東海道の地図：歩いた分はオレンジ、残りは灰色。道筋が分からない区間と七里の渡しは点線
+  map.addLayer({id:'tkLine', type:'line', source:'tkLine', filter:['==', ['get', 'g'], 0], layout:{'line-cap':'round', 'line-join':'round'},
+    paint:{'line-color':['match', ['get', 'd'], 1, '#e67e22', '#7f8c8d'], 'line-width':5}});
+  map.addLayer({id:'tkGap', type:'line', source:'tkLine', filter:['==', ['get', 'g'], 1],
+    paint:{'line-color':['match', ['get', 'd'], 1, '#e67e22', '#7f8c8d'], 'line-width':4, 'line-dasharray':[2, 2]}});
+  map.addLayer({id:'tkSt', type:'circle', source:'tkSt', paint:{'circle-radius':6,
+    'circle-color':['match', ['get', 'd'], 1, '#e67e22', '#fff'], 'circle-stroke-color':'#a04000', 'circle-stroke-width':2}});
+  map.addLayer({id:'tkStName', type:'symbol', source:'tkSt', layout:{'text-field':['get', 'n'], 'text-size':12, 'text-offset':[0, 1.2], 'text-anchor':'top'},
+    paint:{'text-color':'#6e2c00', 'text-halo-color':'#fff', 'text-halo-width':1.5}});
   map.on('click', 'poi', e => {
     if (pickMode || !e.features.length) return;
     const f = e.features[0];
@@ -65,6 +80,12 @@ map.on('click', e => {
   if (pickMode === 'from') { pickMode = null; setStart(p); }
   else if (pickMode === 'dest') { pickMode = null; destName = ''; setDest(p); }
   else if (pickMode === 'via') { pickMode = null; addVia(p); }
+  else if (!tkOn && $('meshChk').checked) {
+    // 踏破マスを表示しているときは、タップしたマスの残りを出す（神社・寺・公園の印をタップしたときは除く）
+    let onPoi = false;
+    try { onPoi = map.queryRenderedFeatures(e.point, {layers: ['poi']}).length > 0; } catch (er) {}
+    if (!onPoi) showMeshAt(p);
+  }
 });
 
 // ---------- 追従と向き ----------

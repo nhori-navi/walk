@@ -9,7 +9,7 @@ async function fetchOverpass(bb) {
 // サーバーに上から順に頼む。6秒返事がなければ次にも頼み（同時は2か所まで）、断られたら待たずに次へ。
 // 最初に返ってきた答えを使い、残りは止める（各25秒で打ち切り）
 const OVP_PAR = 2, OVP_WAIT = 6000, OVP_LIMIT = 25000;
-function overpass(q) {
+function overpass(q, limit) {
   return new Promise((resolve, reject) => {
     const reasons = [], ctls = [];
     let idx = 0, running = 0, done = false, timer = null;
@@ -23,7 +23,7 @@ function overpass(q) {
       if (done) return;
       if (idx >= OVERPASS.length || running >= OVP_PAR) { fail(); return; }
       const [url, label] = OVERPASS[idx++];
-      const ctl = new AbortController(), tm = setTimeout(() => ctl.abort(), OVP_LIMIT);
+      const ctl = new AbortController(), tm = setTimeout(() => ctl.abort(), limit || OVP_LIMIT);
       ctls.push(ctl); running++;
       (async () => {
         const r = await fetch(url, {method:'POST', body:'data=' + encodeURIComponent(q),
@@ -117,13 +117,15 @@ function buildGraph(els) {
       : /^(tertiary|secondary|primary|trunk)/.test(hw) ? 2 : 1;
     // 橋・トンネルの上は地面の高さと違うので、高さを両側からつなぐ対象にする
     const br = (t.bridge && t.bridge !== 'no') || t.tunnel === 'yes';
+    // マスの完全制覇で数えない道：車道沿いの別線の歩道・横断歩道・駐車場の通路・敷地への引き込み道
+    const nx = /^(sidewalk|crossing)$/.test(t.footway || '') || /^(parking_aisle|driveway|drive-through)$/.test(t.service || '') ? 1 : 0;
     n.forEach(i => { if (br) onBridge[i] = 1; else onGround[i] = 1; });
     ways.push({n, k: !ok ? 'ng' : (stp ? 'steps' : 'ok')});
     if (!ok) return;
     for (let i = 0; i < n.length - 1; i++) {
       const a = n[i], b = n[i + 1];
       if (a === b || emap.has(edgeKey(a, b))) continue;
-      const ed = {a, b, w: distM([lon[a], lat[a]], [lon[b], lat[b]]), k: 0, s: stp ? 1 : 0, c: cls};
+      const ed = {a, b, w: distM([lon[a], lat[a]], [lon[b], lat[b]]), k: 0, s: stp ? 1 : 0, c: cls, x: nx};
       edges.push(ed); emap.set(edgeKey(a, b), ed);
       adj[a].push([b, ed]); adj[b].push([a, ed]);
     }
@@ -182,6 +184,31 @@ function markWalked(g) {
     }
     if (hit / n >= 0.5) e.k = 1;
   });
+}
+
+// 歩行中：新しく歩いた区間（pts の点の並び）の近くの道にだけ「歩いた」の印を足す。印が増えたら true
+function markWalkedPts(g, pts) {
+  if (!g || !pts || pts.length < 2) return false;
+  const segs = [];
+  for (let i = 1; i < pts.length; i++) if (distM(pts[i - 1], pts[i]) <= 80) segs.push([pts[i - 1], pts[i]]);
+  if (!segs.length) return false;
+  const idx = segIndex(g.bb, segs);
+  let w = 180, e = -180, s = 90, n = -90;
+  segs.forEach(([a, b]) => { w = Math.min(w, a[0], b[0]); e = Math.max(e, a[0], b[0]); s = Math.min(s, a[1], b[1]); n = Math.max(n, a[1], b[1]); });
+  const m = 0.0005; let ch = false;
+  g.edges.forEach(ed => {
+    if (ed.k) return;
+    const A = [g.lon[ed.a], g.lat[ed.a]], B = [g.lon[ed.b], g.lat[ed.b]];
+    if (Math.max(A[0], B[0]) < w - m || Math.min(A[0], B[0]) > e + m || Math.max(A[1], B[1]) < s - m || Math.min(A[1], B[1]) > n + m) return;
+    const k = Math.max(1, Math.ceil(ed.w / 20)); let hit = 0;
+    for (let i = 0; i < k; i++) {
+      const t = (i + 0.5) / k;
+      if (idx.near([A[0] + (B[0] - A[0]) * t, A[1] + (B[1] - A[1]) * t], 15)) hit++;
+    }
+    if (hit / k >= 0.5) { ed.k = 1; ch = true; }
+  });
+  if (ch) g.wIdx = null;
+  return ch;
 }
 
 // ---------- 記録の整理用：線分を40m四方のマスに入れて、点の近くにあるかをすばやく調べる ----------

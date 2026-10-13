@@ -90,6 +90,7 @@ function renderHud() {
     (route && route.prof && lastRemain >= 20 ? `<div>残りの上り ${Math.round(route.remUp)}m</div>` : '') +
     `<div>${v === null ? '—' : (v * 3.6).toFixed(1)} km/h　${Math.round(walk.kcal)} kcal</div>` +
     `<div class="small" style="margin:0">歩行 ${fmtTime(el)}・${fmtDist(walk.dist)}</div>` +
+    (meshHud() ? `<div class="small" style="margin:0;color:#b9770e">${meshHud()}</div>` : '') +
     (walk.badSince && now - walk.badSince >= 10000 ? `<div class="small" style="margin:0;color:#c00">位置が粗いので記録を止めています（精度 約${fmtAcc(walk.acc)}）</div>` : '') +
     (walk.note && now < walk.noteUntil ? `<div class="small" style="margin:0;color:#1f6fd1">${walk.note}</div>` : '') +
     (walk.msg && now < walk.msgUntil ? `<div class="small" style="margin:0;max-width:240px;color:${walk.msgErr ? '#c00' : '#555'}">${esc(walk.msg)}</div>` : '');
@@ -440,7 +441,7 @@ $('recExport').onclick = () => {
   const set = {};
   BK_SET.concat(BK_TK).forEach(k => { const v = getLS(k); if (v !== null) set[k] = v; });
   const d = new Date();
-  const blob = new Blob([JSON.stringify({app: 'MichiMiru', kind: 'all', v: 2, t: Date.now(), data: {tracks, stamps, favs, set}})], {type: 'application/json'});
+  const blob = new Blob([JSON.stringify({app: 'MichiMiru', kind: 'all', v: 2, t: Date.now(), data: {tracks, stamps, favs, set, meshdone: meshDone}})], {type: 'application/json'});
   const a = document.createElement('a');
   a.href = URL.createObjectURL(blob); a.download = `michimiru-kiroku-${ymdNum(d)}.json`;
   document.body.appendChild(a); a.click(); a.remove();
@@ -465,11 +466,13 @@ function backupPlan(b, name) {
   const newSt = st.filter(k => !stamps[k]).length;
   const fv = Array.isArray(b.favs) ? b.favs.filter(x => x && x.name && Array.isArray(x.p)) : [];
   const newFv = fv.filter(x => !favs.some(f => favSame(f, x))).length;
+  const md = b.meshdone && typeof b.meshdone === 'object' ? Object.keys(b.meshdone) : [];
+  const newMd = md.filter(k => !meshDone[k]).length;
   const set = b.set || {};
   const fill = BK_SET.filter(k => set[k] !== undefined && getLS(k) === null).length + (set.walk_tokaido_from !== undefined && getLS('walk_tokaido_from') === null ? 1 : 0);
   const when = b.t ? `（書き出し ${ymd(b.t).replace(/-/g, '/')}）` : '';
   return `「${name}」${when}：記録 ${tr.length}本（うち新しい分 ${newTr}本）、スタンプ ${st.length}か所（新しい場所 ${newSt}）` +
-    (b.favs ? `、お気に入り ${fv.length}件（新しい分 ${newFv}件）` : '') + (b.set ? `、設定 ${fill}項目（この端末でまだ決めていない分だけ）` : '') +
+    (b.favs ? `、お気に入り ${fv.length}件（新しい分 ${newFv}件）` : '') + (md.length ? `、完全制覇のマス ${md.length}個（新しい分 ${newMd}個）` : '') + (b.set ? `、設定 ${fill}項目（この端末でまだ決めていない分だけ）` : '') +
     '。今の記録は消さずに足し合わせます。';
 }
 function applyBackup(b) {
@@ -496,6 +499,11 @@ function applyBackup(b) {
   if (Array.isArray(b.favs)) {
     b.favs.forEach(x => { if (x && x.name && Array.isArray(x.p) && !favs.some(f => favSame(f, x))) favs.push({name: x.name, p: x.p}); });
     saveFavs();
+  }
+  // 完全制覇のマスは、早い日付を残して合わせる
+  if (b.meshdone && typeof b.meshdone === 'object') {
+    Object.entries(b.meshdone).forEach(([k, t]) => { if (typeof t === 'number' && (!meshDone[k] || t < meshDone[k])) meshDone[k] = t; });
+    saveMeshDone();
   }
   // 体重・設定・東海道は、この端末でまだ決めていない項目だけ埋める
   const set = b.set || {};

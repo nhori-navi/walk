@@ -36,6 +36,12 @@ details{margin:8px 0;background:#fff;border:1px solid #ddd;border-radius:6px;pad
 #warn{display:none;background:#fff3cd;border:1px solid #e0a800;border-radius:6px;padding:6px 8px;margin:4px 0;font-size:14px}
 #impBox{display:none;background:#fff3cd;border:1px solid #e0a800;border-radius:6px;padding:6px 8px;margin:6px 0;font-size:14px}
 #loc{line-height:1.5}
+body.tkmode #hud,body.tkmode #reBtn{display:none!important}
+#tkTop{position:absolute;top:8px;left:8px;right:56px;z-index:7;display:none;background:rgba(255,253,245,.96);border:1px solid #e0a800;border-radius:8px;padding:6px 10px;box-shadow:0 1px 4px rgba(0,0,0,.3);font-size:14px;line-height:1.5}
+body.tkmode #tkTop{display:block}
+#tkTop a{color:#1f6fd1;margin-right:10px;font-size:13px}
+#tkClose{float:right;margin:0 0 4px 6px}
+.tkme{font-size:26px;line-height:1;filter:drop-shadow(0 1px 2px rgba(0,0,0,.5))}
 .me .arw{position:absolute;left:11px;top:0;width:0;height:0;border-left:6px solid transparent;border-right:6px solid transparent;border-bottom:10px solid #1e90ff;display:none}
 .lg{display:inline-block;width:14px;height:4px;vertical-align:middle;margin:0 2px 0 6px}
 #hud{position:absolute;top:8px;left:8px;z-index:5;display:none;background:rgba(255,255,255,.9);border-radius:8px;padding:6px 10px;box-shadow:0 1px 4px rgba(0,0,0,.3);line-height:1.4;font-size:14px}
@@ -60,6 +66,8 @@ body.walking.menu #panel{display:block;top:50%;bottom:52px;left:0;right:0;width:
 <body>
 <div id="map"></div>
 <div id="hud"></div>
+<div id="tkTop"><button id="tkClose">× 戻る</button><div id="tkInfo"></div><div id="tkMsg" class="small"></div>
+  <a id="tkSv" target="_blank" rel="noopener">ストリートビューで見る</a><a id="tkGm" target="_blank" rel="noopener">Googleマップで見る</a></div>
 <div id="tab"><button id="menuBtn">▲メニュー</button><button id="wakeBtn">画面ON：切</button><button id="lockBtn">🔒ロック</button><button id="endBtn">終了</button></div>
 <div id="lock"><div id="lockBadge">🔒 ロック中　ここを長押しで解除<div id="lockBar"></div></div></div>
 <div id="panel">
@@ -100,11 +108,14 @@ body.walking.menu #panel{display:block;top:50%;bottom:52px;left:0;right:0;width:
     <summary id="playSum">あそぶ（踏破マス・スタンプ帳・東海道）</summary>
     <div id="meshStat" class="row"></div>
     <div class="small"><label><input type="checkbox" id="meshChk">地図に踏破マスを表示（約125m四方。国の地域メッシュの区切り）</label></div>
+    <div class="small">マスの中の道を全部（残り30m未満まで）歩くと完全制覇で金色になります。表示中にマスをタップすると、残りの長さと、まだ歩いていない道（赤い点線）が出ます。車道沿いの別線の歩道・横断歩道・駐車場の通路は数えません。道のデータを読み込んだ範囲のマスだけ判定できます。</div>
+    <div class="row" style="margin-top:6px">あと少しのマス（残り200m以下・近い順）</div>
+    <div id="nearList" style="border:1px solid #eee;border-radius:4px"></div>
     <div class="row" style="margin-top:10px">🏯 バーチャル東海道（日本橋→京都三条大橋 約495km）</div>
     <div id="tkText" class="small" style="color:#333;line-height:1.6"></div>
     <div style="background:#eee;border-radius:4px;height:8px;margin:4px 0"><div id="tkBar" style="background:#e67e22;height:8px;border-radius:4px;width:0"></div></div>
-    <button id="tkReset">最初からやり直す</button>
-    <div class="small">宿場間の距離：川口市の資料（東海道五十三次のおおよその距離）による</div>
+    <button id="tkMapBtn">地図で見る</button><button id="tkReset">最初からやり直す</button>
+    <div class="small">宿場間の距離：川口市の資料（東海道五十三次のおおよその距離）による。「地図で見る」は、OpenStreetMap の旧東海道の道筋の上に今の位置を出します（宿場の位置は国土地理院の住所検索で調べた本陣のあった町）。</div>
     <div id="stampStat" class="row" style="margin-top:10px"></div>
     <div class="small">名前のある神社・寺・公園の50m以内を通るとスタンプが押されます（神社・寺・公園のデータを読み込んだ範囲だけ）。名前をタップすると地図で場所を表示します。</div>
     <div id="stampList" style="max-height:220px;overflow:auto;border:1px solid #eee;border-radius:4px"></div>
@@ -147,7 +158,8 @@ body.walking.menu #panel{display:block;top:50%;bottom:52px;left:0;right:0;width:
     ・坂の計算：ルートのまわりの標高タイルの番号 → 国土地理院<br>
     ・名称検索：検索した文字と、出発地のまわり約60km四方の範囲（約500m単位に丸める）→ OpenStreetMap 財団（Nominatim）<br>
     ・住所検索：検索した文字だけ → 国土地理院<br>
-    ・比較ルート（入にしたときだけ）：出発地・経由地・目的地の座標 → Mapbox 社
+    ・比較ルート（入にしたときだけ）：出発地・経由地・目的地の座標 → Mapbox 社<br>
+    ・東海道の地図：旧東海道の道筋（初めの1回だけ。あなたの場所は送りません）→ OpenStreetMap の公開サーバー。「ストリートビューで見る」「Googleマップで見る」を押したときだけ、東海道の上の今の位置（あなたの現在地ではありません）→ Google 社
     </div>
   </details>
   <div class="small">道路・名称検索データ © OpenStreetMap contributors／標高・住所検索：国土地理院／東海道の宿場間の距離：川口市の資料<br>MichiMiru　<span id="ver"></span></div>
@@ -160,12 +172,13 @@ window.addEventListener('error', e => {
   if (el) el.textContent = el.textContent ? el.textContent + ' ／ ' + m : m;
 }, true);
 </script>
-<script src="config.js?v=5"></script>
-<script src="base.js?v=5"></script>
-<script src="road.js?v=5"></script>
-<script src="poi.js?v=5"></script>
-<script src="walk.js?v=5"></script>
-<script src="play.js?v=5"></script>
-<script src="app.js?v=5"></script>
+<script src="config.js?v=6"></script>
+<script src="base.js?v=6"></script>
+<script src="road.js?v=6"></script>
+<script src="poi.js?v=6"></script>
+<script src="walk.js?v=6"></script>
+<script src="play.js?v=6"></script>
+<script src="tokaido.js?v=6"></script>
+<script src="app.js?v=6"></script>
 </body>
 </html>
