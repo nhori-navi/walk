@@ -1,4 +1,4 @@
-// 徒歩ナビ：道のデータ（OpenStreetMap）・ルート計算（A*法）・曲がり角などの案内
+// MichiMiru：道のデータ（OpenStreetMap）・ルート計算（A*法）・曲がり角などの案内
 
 // ---------- 道のデータ（OpenStreetMap） ----------
 const bboxStr = bb => [bb.s, bb.w, bb.n, bb.e].map(v => v.toFixed(5)).join(',');
@@ -6,32 +6,45 @@ async function fetchOverpass(bb) {
   try { return await overpass(`[out:json][timeout:90];way["highway"~"${HW}"](${bboxStr(bb)});out body;>;out skel qt;`); }
   catch (e) { throw new Error('道の' + e.message); }
 }
-// 3か所のサーバーに同時に頼み、最初に返ってきた答えを使う（各25秒で打ち切り）
-async function overpass(q) {
-  const reasons = [], ctls = [];
-  let done = false;
-  const one = async ([url, label]) => {
-    const ctl = new AbortController(), tm = setTimeout(() => ctl.abort(), 25000);
-    ctls.push(ctl);
-    try {
-      const r = await fetch(url, {method:'POST', body:'data=' + encodeURIComponent(q),
-        headers:{'Content-Type':'application/x-www-form-urlencoded'}, signal: ctl.signal});
-      if (!r.ok) throw new Error('HTTP ' + r.status);
-      let j; try { j = await r.json(); } catch (e) { throw new Error('応答が壊れていた'); }
-      if (j.remark && /error/i.test(j.remark)) throw new Error('混雑で打ち切り');
-      return j.elements || [];
-    } catch (e) {
-      if (!done) reasons.push(label + '：' + (e.name === 'AbortError' ? '時間切れ' : e.name === 'TypeError' ? '接続できず' : e.message));
-      throw e;
-    } finally { clearTimeout(tm); }
-  };
-  try {
-    const els = await Promise.any(OVERPASS.map(one));
-    done = true; ctls.forEach(c => c.abort()); // 残りの問い合わせは止める
-    return els;
-  } catch (e) {
-    throw new Error('データを取得できませんでした（' + reasons.join('、') + '）');
-  }
+// サーバーに上から順に頼む。6秒返事がなければ次にも頼み（同時は2か所まで）、断られたら待たずに次へ。
+// 最初に返ってきた答えを使い、残りは止める（各25秒で打ち切り）
+const OVP_PAR = 2, OVP_WAIT = 6000, OVP_LIMIT = 25000;
+function overpass(q) {
+  return new Promise((resolve, reject) => {
+    const reasons = [], ctls = [];
+    let idx = 0, running = 0, done = false, timer = null;
+    const why = e => e.name === 'AbortError' ? '時間切れ' : e.name === 'TypeError' ? '接続できず' : e.message;
+    const fail = () => {
+      if (done || running || idx < OVERPASS.length) return;
+      done = true; reject(new Error('データを取得できませんでした（' + reasons.join('、') + '）'));
+    };
+    const next = () => {
+      clearTimeout(timer);
+      if (done) return;
+      if (idx >= OVERPASS.length || running >= OVP_PAR) { fail(); return; }
+      const [url, label] = OVERPASS[idx++];
+      const ctl = new AbortController(), tm = setTimeout(() => ctl.abort(), OVP_LIMIT);
+      ctls.push(ctl); running++;
+      (async () => {
+        const r = await fetch(url, {method:'POST', body:'data=' + encodeURIComponent(q),
+          headers:{'Content-Type':'application/x-www-form-urlencoded'}, signal: ctl.signal});
+        if (!r.ok) throw new Error('HTTP ' + r.status);
+        let j; try { j = await r.json(); } catch (e) { throw new Error('応答が壊れていた'); }
+        if (j.remark && /error/i.test(j.remark)) throw new Error('混雑で打ち切り');
+        return j.elements || [];
+      })().then(els => {
+        if (done) return;
+        done = true; clearTimeout(timer); ctls.forEach(c => c.abort()); // 残りの問い合わせは止める
+        resolve(els);
+      }, e => {
+        if (done) return;
+        reasons.push(label + '：' + why(e)); running--;
+        next(); // 断られたら待たずに次へ
+      }).finally(() => clearTimeout(tm));
+      if (idx < OVERPASS.length) timer = setTimeout(next, OVP_WAIT); // 返事が遅ければ次にも頼む
+    };
+    next();
+  });
 }
 // 必要な範囲の道の網を用意する（保存済みがあればそれを使い、なければ取り寄せて保存）
 async function ensureGraph(need, fetchBB) {
@@ -66,11 +79,17 @@ async function ensureGraph(need, fetchBB) {
   drawNet(); drawPois(); drawTracks();
   ensurePois(graph, true).then(() => updStamps()).catch(() => {}); // スタンプ帳のために神社・寺・公園も用意（失敗しても続ける）
 }
-// 起動直後に、現在地の周りの道のデータを先に用意しておく
+// 起動直後に、出発地の周りの道のデータを先に用意しておく
+// 現在地は精度100m以内のときだけ使う。送る範囲の中心は約500m単位に丸める（範囲は半径2kmあるので使い勝手は変わらない）
 async function prefetch() {
-  if (busy || graph || !pos) return;
+  const o = startPt || (isRough() ? null : pos);
+  if (busy || graph || !o) return;
   busy = true;
-  try { await ensureGraph(bboxOf([pos], 1500), bboxOf([pos], 2000)); if (!route) status('周辺の道のデータを準備しました。目的地を設定してください。'); }
+  try {
+    const c = round500(o);
+    await ensureGraph(bboxOf([c], 1500), bboxOf([c], 2000));
+    if (!route) status('周辺の道のデータを準備しました。目的地を設定してください。');
+  }
   catch (e) { status(''); }
   finally { busy = false; if (pending) { pending = false; calc(); } }
 }

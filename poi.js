@@ -1,4 +1,4 @@
-// 徒歩ナビ：寄り道（神社・寺・公園）
+// MichiMiru：寄り道（神社・寺・公園）
 
 // ---------- 寄り道（神社・寺・公園） ----------
 const poiKinds = () => [['poiShrine', 'shrine'], ['poiTemple', 'temple'], ['poiPark', 'park']].filter(([id]) => $(id).checked).map(x => x[1]);

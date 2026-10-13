@@ -1,4 +1,4 @@
-// 徒歩ナビ：歩行中の記録・案内表示・記録の保護・画面ON・タッチロック・歩いた記録・GPX
+// MichiMiru：歩行中の記録・案内表示・記録の保護・画面ON・タッチロック・歩いた記録・GPX
 
 // ---------- 歩行中の記録（距離・速度・カロリー） ----------
 const METS = [[1.5, 1.3], [3.2, 2.8], [4.0, 3.0], [4.8, 3.5], [5.6, 4.3], [6.4, 5.0], [7.2, 7.0]];
@@ -12,7 +12,11 @@ function mets(kmh) {
 }
 function walkStep(c) {
   const now = Date.now(), p = [c.longitude, c.latitude];
-  if (c.accuracy <= 50) {
+  // 精度50m超が10秒以上続いたら、記録を止めていることを知らせる
+  if (c.accuracy > REC_M) { if (!walk.badSince) walk.badSince = now; }
+  else walk.badSince = 0;
+  walk.acc = c.accuracy;
+  if (c.accuracy <= REC_M) {
     if (!walk.last) { walk.last = {p, t: now}; walk.track.pts.push(roundP(p)); }
     else {
       const d = distM(walk.last.p, p), dt = (now - walk.last.t) / 1000;
@@ -34,14 +38,14 @@ function walkStep(c) {
       }
     }
   }
-  if (c.accuracy <= 50) stampLive(p);
+  if (c.accuracy <= REC_M) stampLive(p);
   walk.hist.push({t: now, d: walk.dist});
   while (walk.hist.length && walk.hist[0].t < now - 120000) walk.hist.shift();
   renderHud();
 }
 // 次の案内（曲がり角・階段・急な上り坂）と、そこまでの距離
 function nextTurn() {
-  if (!route || !route.turns || !route.turns.length || route.off > 60) return null;
+  if (!route || !route.turns || !route.turns.length || route.off > 60 || route.rough) return null;
   const t = route.turns.find(x => x.d > route.a - 10);
   return t ? {t, dist: Math.max(0, t.d - route.a)} : null;
 }
@@ -63,7 +67,7 @@ function turnHtml() {
 }
 // 案内の40m手前で一度だけ振動する
 function maybeVibrate() {
-  if (!walk || !$('vibChk').checked || !navigator.vibrate) return;
+  if (!walk || !$('vibChk').checked || !CAN_VIB) return;
   const n = nextTurn();
   if (n && n.dist <= 40 && !route.vib[n.t.d]) { route.vib[n.t.d] = 1; try { navigator.vibrate([200, 100, 200]); } catch (e) {} }
 }
@@ -79,18 +83,25 @@ function renderHud() {
   const pace = (el < 120 || walk.dist < 100) ? SPEED / 60 : Math.max(0.3, walk.dist / el);
   let top = '';
   if (lastRemain === null) top = '<div class="big">記録中（ルートなし）</div>';
+  else if (route && route.rough) top = `<div class="big">残り 約${fmtDist(lastRemain)}</div><div class="small" style="margin:0">位置が粗いため目安です</div>`;
   else if (lastRemain < 20) top = `<div class="big">${route && route.loop ? '出発点に戻りました' : '到着しました'}</div>`;
   else top = turnHtml() + `<div class="big">残り ${fmtDist(lastRemain)}</div><div class="big">到着 ${hm(new Date(now + lastRemain / pace * 1000))}</div>`;
   $('hud').innerHTML = top +
     (route && route.prof && lastRemain >= 20 ? `<div>残りの上り ${Math.round(route.remUp)}m</div>` : '') +
     `<div>${v === null ? '—' : (v * 3.6).toFixed(1)} km/h　${Math.round(walk.kcal)} kcal</div>` +
     `<div class="small" style="margin:0">歩行 ${fmtTime(el)}・${fmtDist(walk.dist)}</div>` +
+    (walk.badSince && now - walk.badSince >= 10000 ? `<div class="small" style="margin:0;color:#c00">位置が粗いので記録を止めています（精度 約${fmtAcc(walk.acc)}）</div>` : '') +
     (walk.note && now < walk.noteUntil ? `<div class="small" style="margin:0;color:#1f6fd1">${walk.note}</div>` : '') +
     (walk.msg && now < walk.msgUntil ? `<div class="small" style="margin:0;max-width:240px;color:${walk.msgErr ? '#c00' : '#555'}">${esc(walk.msg)}</div>` : '');
 }
 function resizeSoon() { setTimeout(() => map.resize(), 60); }
+// 振動できない端末（パソコン・iPhone）では、振動の設定を押せなくする
+if (!CAN_VIB) { $('vibChk').checked = false; $('vibChk').disabled = true; $('vibTest').disabled = true; $('vibMsg').textContent = 'この端末は振動に対応していません'; }
+if (IOS) $('iosNote').style.display = '';
+// パソコンでは、歩行中の下の帯のロックを出さない
+if (PC_LIKE) $('lockBtn').style.display = 'none';
 $('vibTest').onclick = () => {
-  if (!navigator.vibrate) { $('vibMsg').textContent = 'この端末・ブラウザは振動に対応していません'; return; }
+  if (!CAN_VIB) { $('vibMsg').textContent = 'この端末は振動に対応していません'; return; }
   const ok = navigator.vibrate([300, 150, 300]);
   $('vibMsg').textContent = ok ? '振動の命令を送りました。震えなければ、スマホのマナーモード・バイブの強さ・省電力モードを確認してください'
     : 'ブラウザが振動を止めました（画面を一度タップしてから試してください）';
@@ -103,7 +114,7 @@ function saveSession() {
     if (!walk) { localStorage.removeItem('walk_session'); return; }
     const r = route && {coords: route.coords, pts: route.pts, baseTotal: route.baseTotal, loop: route.loop, ur: route.ur,
       prof: route.prof, turns: route.turns, prog: route.prog};
-    localStorage.setItem('walk_session', JSON.stringify({t0: walk.t0, dist: walk.dist, kcal: walk.kcal, up: walk.up,
+    lsSet('walk_session', JSON.stringify({t0: walk.t0, dist: walk.dist, kcal: walk.kcal, up: walk.up,
       saved: Date.now(), dest, destName, mode, route: r}));
   } catch (e) {}
 }
@@ -113,7 +124,7 @@ window.addEventListener('pagehide', saveNow);
 // 歩行中にページを閉じたり戻ったりしようとしたら確認を出す
 window.addEventListener('beforeunload', e => { if (walk) { saveNow(); e.preventDefault(); e.returnValue = ''; } });
 function startWalk(prev) {
-  walk = Object.assign({t0: Date.now(), dist: 0, kcal: 0, up: 0, track: null}, prev || {}, {eRef: null, last: null, hist: []});
+  walk = Object.assign({t0: Date.now(), dist: 0, kcal: 0, up: 0, track: null}, prev || {}, {eRef: null, last: null, hist: [], badSince: 0, acc: null});
   if (!walk.track) { walk.track = {k: 'walk', t0: walk.t0, t1: walk.t0, kcal: 0, pts: []}; tracks.push(walk.track); }
   document.body.classList.add('walking'); document.body.classList.remove('menu');
   $('menuBtn').textContent = '▲メニュー';
@@ -126,7 +137,12 @@ function startWalk(prev) {
   saveSession();
   renderHud(); updToday();
 }
-$('walkBtn').onclick = () => { if (!walk) startWalk(); };
+$('walkBtn').onclick = () => {
+  if (walk) return;
+  // パソコンなど向きのセンサーがない端末は位置が粗く、記録がほとんど残らないので始めない
+  if (noSensor()) { status('歩いた記録はスマホで取れます。この端末は位置が粗く、記録がほとんど残りません（ルートの計算や記録の表示は使えます）'); return; }
+  startWalk();
+};
 // 30分以内に開き直したら、歩行を続きから再開する
 function restoreSession() {
   let s = null;
@@ -158,7 +174,7 @@ async function applyWake() {
     try {
       wakeLock = await navigator.wakeLock.request('screen');
       wakeLock.addEventListener('release', () => { wakeLock = null; });
-    } catch (e) { wakeOn = false; showErr('画面をつけたままにできませんでした（' + e.message + '）'); }
+    } catch (e) { wakeOn = false; showErr('画面をつけたままにできませんでした（' + (e.name === 'NotAllowedError' ? '画面を表示している間だけ使えます' : jaErr(e)) + '）'); }
   } else if (!wakeOn && wakeLock) {
     try { await wakeLock.release(); } catch (e) {}
     wakeLock = null;
@@ -198,6 +214,9 @@ $('endBtn').onclick = () => {
   const el = (Date.now() - walk.t0) / 1000;
   const avg = el > 0 ? walk.dist / el * 3.6 : 0;
   $('result').textContent = `今回の歩行：${fmtTime(el)}・${fmtDist(walk.dist)}・平均${avg.toFixed(1)}km/h・${walk.up >= 1 ? `上り約${Math.round(walk.up)}m・` : ''}${Math.round(walk.kcal)}kcal`;
+  // 最後の書き出しから30日以上なら、控えを勧める
+  const bk = Number(getLS('walk_bk_last')) || 0;
+  if (Date.now() - bk >= 30 * 864e5) $('result').textContent += `　※${bk ? '最後の書き出しから30日以上たっています' : 'まだ記録を書き出していません'}。「歩いた記録の管理」の「全部まとめて書き出す」で控えを取りましょう`;
   walk.track.t1 = Date.now(); walk.track.kcal = Math.round(walk.kcal * 10) / 10;
   if (walk.track.pts.length < 2) tracks = tracks.filter(t => t !== walk.track);
   saveTracks();
@@ -212,7 +231,7 @@ $('endBtn').onclick = () => {
 // ---------- 歩いた記録（保存・表示） ----------
 function saveTracks() {
   try { localStorage.setItem('walk_tracks', JSON.stringify(tracks)); return true; }
-  catch (e) { showErr('記録の保存に失敗しました。容量不足の可能性があります。「記録を書き出す」で控えを取ってください'); return false; }
+  catch (e) { showErr('記録の保存に失敗しました。容量不足の可能性があります。「全部まとめて書き出す」で控えを取ってください'); return false; }
 }
 function splitLines(pts, gap) {
   const out = []; let cur = [pts[0]];
@@ -272,10 +291,12 @@ function drawTracks() {
   setData('walked', $('walkedChk').checked ? fw : []);
   setData('veh', $('vehChk').checked ? fv : []);
   setData('off', $('walkedChk').checked && $('offChk').checked ? fo : []);
-  const pct = Math.round(JSON.stringify(tracks).length / 5000000 * 100);
-  $('recStat').innerHTML = `保存済み：歩行 ${(lw / 1000).toFixed(1)}km${lo >= 50 ? `（道から外れた${(lo / 1000).toFixed(1)}kmは除く）` : ''}・乗り物 ${(lv / 1000).toFixed(1)}km（保存容量の約${pct}%）` +
-    (graph ? `<br>いま読み込んでいる範囲で歩いた道の長さ：${(lu / 1000).toFixed(1)}km（同じ道は1回と数える）` : '');
-  if (pct >= 80) showErr('記録の保存容量が残り少なくなっています。「記録を書き出す」で控えを取ってください');
+  const u = lsUsage(), pct = Math.round(u.all / LS_CAP * 100), mine = Math.round(u.mine / LS_CAP * 100);
+  $('recStat').innerHTML = `保存済み：歩行 ${(lw / 1000).toFixed(1)}km${lo >= 50 ? `（道から外れた${(lo / 1000).toFixed(1)}kmは除く）` : ''}・乗り物 ${(lv / 1000).toFixed(1)}km` +
+    (graph ? `<br>いま読み込んでいる範囲で歩いた道の長さ：${(lu / 1000).toFixed(1)}km（同じ道は1回と数える）` : '') +
+    `<br>この端末の保存場所（同じアドレスの4つのアプリで共有）：約${pct}%使用（うち MichiMiru ${mine}%）`;
+  if (pct >= 80) showErr('この端末の保存場所が残り少なくなっています。「全部まとめて書き出す」で控えを取ってください');
+  updBkLast();
   updPlay(cleaned);
   updToday();
 }
@@ -400,22 +421,70 @@ function processSeg(raw, src) {
   });
   return out;
 }
-function importBackup(txt) {
-  const o = JSON.parse(txt), arr = Array.isArray(o) ? o : (o.tracks || []);
-  const key = t => `${t.t0}|${t.k || 'walk'}|${t.pts[0]}`;
-  const have = new Set(tracks.filter(t => t.pts && t.pts.length).map(key));
+// ---------- 全部まとめて書き出す・読み込む ----------
+// 書き出す設定（値は保存している文字のまま）。東海道は起点と進み具合を組で扱う
+const BK_SET = ['walk_weight', 'walk_vib', 'walk_autofollow', 'walk_offshow', 'walk_meshshow', 'walk_cmp'];
+const BK_TK = ['walk_tokaido_from', 'walk_tokaido_last'];
+const ymdNum = d => `${d.getFullYear()}${String(d.getMonth() + 1).padStart(2, '0')}${String(d.getDate()).padStart(2, '0')}`;
+const trackKey = t => `${t.t0}|${t.k || 'walk'}|${t.pts[0]}`;
+const favSame = (a, b) => a.name === b.name && distM(a.p, b.p) < 1;
+function updBkLast() {
+  const t = Number(getLS('walk_bk_last')) || 0;
+  if (!t) { $('bkLast').textContent = '最後に書き出した日：まだ書き出していません'; return; }
+  const days = Math.floor((Date.now() - t) / 864e5);
+  $('bkLast').textContent = `最後に書き出した日：${ymd(t).replace(/-/g, '/')}（${days ? days + '日前' : '今日'}）`;
+  $('bkLast').style.color = days >= 30 ? '#c0392b' : '';
+}
+$('recExport').onclick = () => {
+  saveNow();
+  const set = {};
+  BK_SET.concat(BK_TK).forEach(k => { const v = getLS(k); if (v !== null) set[k] = v; });
+  const d = new Date();
+  const blob = new Blob([JSON.stringify({app: 'MichiMiru', kind: 'all', v: 2, t: Date.now(), data: {tracks, stamps, favs, set}})], {type: 'application/json'});
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob); a.download = `michimiru-kiroku-${ymdNum(d)}.json`;
+  document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(() => URL.revokeObjectURL(a.href), 5000);
+  lsSet('walk_bk_last', String(Date.now())); updBkLast();
+  status('全部まとめて書き出しました（ダウンロードフォルダを確認してください）');
+};
+// 書き出したファイルを読み解く（版5のまとめた形、版4の {tracks, stamps}、それより前の記録だけの形）
+function parseBackup(txt) {
+  const o = JSON.parse(txt);
+  if (Array.isArray(o)) return {tracks: o};
+  if (o && o.app === 'MichiMiru' && o.data) return Object.assign({t: o.t}, o.data);
+  if (o && Array.isArray(o.tracks)) return {tracks: o.tracks, stamps: o.stamps};
+  throw new Error('MichiMiru の書き出したファイルではありません');
+}
+// 読み込む前の要約（今の記録は消さずに足し合わせる）
+function backupPlan(b, name) {
+  const have = new Set(tracks.filter(t => t.pts && t.pts.length).map(trackKey));
+  const tr = (b.tracks || []).filter(t => t && Array.isArray(t.pts) && t.pts.length >= 2);
+  const newTr = tr.filter(t => !have.has(trackKey(t))).length;
+  const st = b.stamps && typeof b.stamps === 'object' ? Object.keys(b.stamps) : [];
+  const newSt = st.filter(k => !stamps[k]).length;
+  const fv = Array.isArray(b.favs) ? b.favs.filter(x => x && x.name && Array.isArray(x.p)) : [];
+  const newFv = fv.filter(x => !favs.some(f => favSame(f, x))).length;
+  const set = b.set || {};
+  const fill = BK_SET.filter(k => set[k] !== undefined && getLS(k) === null).length + (set.walk_tokaido_from !== undefined && getLS('walk_tokaido_from') === null ? 1 : 0);
+  const when = b.t ? `（書き出し ${ymd(b.t).replace(/-/g, '/')}）` : '';
+  return `「${name}」${when}：記録 ${tr.length}本（うち新しい分 ${newTr}本）、スタンプ ${st.length}か所（新しい場所 ${newSt}）` +
+    (b.favs ? `、お気に入り ${fv.length}件（新しい分 ${newFv}件）` : '') + (b.set ? `、設定 ${fill}項目（この端末でまだ決めていない分だけ）` : '') +
+    '。今の記録は消さずに足し合わせます。';
+}
+function applyBackup(b) {
+  const have = new Set(tracks.filter(t => t.pts && t.pts.length).map(trackKey));
   let n = 0;
-  arr.forEach(t => {
-    if (!t || !Array.isArray(t.pts) || t.pts.length < 2) return;
-    if (have.has(key(t))) return;
+  (b.tracks || []).forEach(t => {
+    if (!t || !Array.isArray(t.pts) || t.pts.length < 2 || have.has(trackKey(t))) return;
     const o = {k: t.k === 'veh' ? 'veh' : 'walk', t0: t.t0, src: t.src, pts: t.pts};
     if (typeof t.t1 === 'number') o.t1 = t.t1;
     if (typeof t.kcal === 'number') o.kcal = t.kcal;
-    tracks.push(o); have.add(key(t)); n++;
+    tracks.push(o); have.add(trackKey(t)); n++;
   });
   // スタンプ帳も合わせる（行った日は両方の分を足す）
-  if (o.stamps && typeof o.stamps === 'object') {
-    Object.entries(o.stamps).forEach(([k, s]) => {
+  if (b.stamps && typeof b.stamps === 'object') {
+    Object.entries(b.stamps).forEach(([k, s]) => {
       if (!s || !Array.isArray(s.days)) return;
       const m = stamps[k];
       if (!m) stamps[k] = s;
@@ -423,38 +492,65 @@ function importBackup(txt) {
     });
     saveStamps(); drawStampList();
   }
+  // お気に入りは、名前と場所が同じものを除いて足す
+  if (Array.isArray(b.favs)) {
+    b.favs.forEach(x => { if (x && x.name && Array.isArray(x.p) && !favs.some(f => favSame(f, x))) favs.push({name: x.name, p: x.p}); });
+    saveFavs();
+  }
+  // 体重・設定・東海道は、この端末でまだ決めていない項目だけ埋める
+  const set = b.set || {};
+  BK_SET.forEach(k => { if (set[k] !== undefined && getLS(k) === null) lsSet(k, String(set[k])); });
+  if (getLS('walk_tokaido_from') === null) {
+    if (set.walk_tokaido_from !== undefined) lsSet('walk_tokaido_from', String(set.walk_tokaido_from));
+    // 進み具合は大きいほうに合わせる（読み込んだ記録の分で「宿場に着いた」の知らせが続けて出ないように）
+    if (set.walk_tokaido_last !== undefined) lsSet('walk_tokaido_last', String(Math.max(Number(getLS('walk_tokaido_last')) || 0, Number(set.walk_tokaido_last) || 0)));
+  }
+  $('weight').value = getLS('walk_weight') || '60';
+  loadFlags(); if (!CAN_VIB) $('vibChk').checked = false;
   return n;
 }
+// 書き出したファイルは、要約を見せて「読み込む」を押したら反映する（複数あれば1つずつ）
+const impQueue = [];
+function showImport() {
+  if (!impQueue.length) { $('impBox').style.display = 'none'; return; }
+  $('impText').textContent = backupPlan(impQueue[0].b, impQueue[0].name);
+  $('impBox').style.display = 'block';
+}
+$('impOk').onclick = () => {
+  const q = impQueue.shift(); if (!q) return;
+  const n = applyBackup(q.b);
+  saveTracks(); afterTracksChanged();
+  status(`「${q.name}」を読み込みました（新しい記録 ${n}本）`);
+  showImport();
+};
+$('impNo').onclick = () => { const q = impQueue.shift(); if (q) status(`「${q.name}」の読み込みをやめました`); showImport(); };
 $('recImport').onclick = () => $('recFile').click();
 $('recFile').onchange = async () => {
   const files = [...$('recFile').files]; $('recFile').value = '';
   if (!files.length) return;
   status('記録を読み込み中…'); await pause();
-  let added = 0, replaced = 0, bad = 0, dup = 0;
+  let added = 0, replaced = 0, bad = 0, dup = 0, gpx = 0;
   for (const f of files) {
     try {
       const txt = await f.text();
-      if (/^\s*[\[{]/.test(txt)) { added += importBackup(txt); continue; }
-      const segs = parseGpx(txt);
+      if (/^\s*[\[{]/.test(txt)) {
+        let b; try { b = parseBackup(txt); } catch (e) { throw new Error(e instanceof SyntaxError ? '読み込めない形式です' : e.message); }
+        impQueue.push({b, name: f.name}); continue;
+      }
+      const segs = parseGpx(txt); gpx++;
       const before = tracks.length;
       tracks = tracks.filter(t => t.src !== f.name);
       if (tracks.length < before) replaced++;
       // OpenTracksはGPSが途切れると区切り（trkseg）を分けるので、1本につなげてから判定する
       const all = segs.flat();
       if (all.length >= 2) { const o = processSeg(all, f.name); dup += dropDup(o); tracks.push(...o); added += o.length; }
-    } catch (e) { bad++; showErr(`${f.name}：${e.message}`); }
+    } catch (e) { bad++; showErr(`${f.name}：${jaErr(e)}`); }
   }
-  saveTracks(); afterTracksChanged();
-  status(`読み込み完了：${files.length - bad}ファイル（区間 ${added}件${replaced ? `、${replaced}ファイルは前回分を置き換え` : ''}${dup ? `、同じ時間のアプリの記録${dup}件を削除` : ''}）`);
-};
-$('recExport').onclick = () => {
-  const d = new Date(), ymd = `${d.getFullYear()}${String(d.getMonth() + 1).padStart(2, '0')}${String(d.getDate()).padStart(2, '0')}`;
-  const blob = new Blob([JSON.stringify({app: 'walk', v: 1, tracks, stamps})], {type: 'application/json'});
-  const a = document.createElement('a');
-  a.href = URL.createObjectURL(blob); a.download = `walk-records-${ymd}.json`;
-  document.body.appendChild(a); a.click(); a.remove();
-  setTimeout(() => URL.revokeObjectURL(a.href), 5000);
-  status('記録を書き出しました（ダウンロードフォルダを確認してください）');
+  if (gpx) {
+    saveTracks(); afterTracksChanged();
+    status(`読み込み完了：GPX ${gpx}ファイル（区間 ${added}件${replaced ? `、${replaced}ファイルは前回分を置き換え` : ''}${dup ? `、同じ時間のアプリの記録${dup}件を削除` : ''}）`);
+  } else if (!impQueue.length) status('読み込めるファイルがありませんでした');
+  if (impQueue.length) { status('書き出したファイルの中身を確かめて、「読み込む」を押してください'); showImport(); }
 };
 twoStep($('recClear'), '記録をすべて消す', () => {
   tracks = []; saveTracks(); afterTracksChanged(); status('記録をすべて消しました');

@@ -1,23 +1,83 @@
-// 徒歩ナビ：共通の部品（画面の状態・表示の小道具・距離の計算・端末への保存・標高）
+// MichiMiru：共通の部品（画面の状態・表示の小道具・距離の計算・端末への保存・標高）
 const $ = id => document.getElementById(id);
 let pos = null, posMarker = null, arw = null, dest = null, destMarker = null, destName = '', vias = [], viaMarkers = [], loopStart = null, poiMarkers = [];
 let pickMode = null, follow = true, busy = false, pending = false, mode = 'to';
 let graph = null, route = null, cands = [], candIdx = 0, cmpCoords = null, cmpText = '', lastRemain = null;
 let headingUp = false, heading = null, hx = 0, hy = 0, lastCompass = 0, lastCam = 0;
 let walk = null, hudTimer = null;
+// 版5：現在地の精度（m）・取れた時刻、地図で選んだ出発地、位置情報のエラー
+let posAcc = null, posAt = 0, startPt = null, startMarker = null, geoErr = null;
 const errs = [];
+// 端末の種類（SoraMiru と同じ考え方）：主な操作がマウスで、向きの値が一度も届いていない端末は「センサーなし」
+const PC_LIKE = !(window.matchMedia && matchMedia('(pointer: coarse)').matches);
+let gotOri = false;
+const noSensor = () => PC_LIKE && !gotOri;
+const CAN_VIB = typeof navigator.vibrate === 'function' && !PC_LIKE; // パソコンの Chrome は命令だけあって震えない
+const IOS = /iPhone|iPad|iPod/.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+// 現在地が「粗い位置」か（精度100m超）。現在地がまだないときも true
+const isRough = () => !pos || posAcc === null || posAcc > ROUGH_M;
+// ルートの出発地：地図で選んだ場所があればそれ、なければ現在地
+const origin = () => startPt || pos;
+// 外へ送る前に約500m単位に丸める（0.005°）
+const round500 = p => [Math.round(p[0] / 0.005) * 0.005, Math.round(p[1] / 0.005) * 0.005];
+const fmtAcc = m => m >= 1000 ? (m / 1000).toFixed(1) + 'km' : Math.round(m) + 'm';
+// 端末への保存（localStorage）。失敗したら10分に1回まで知らせる
+let lsFailAt = 0;
+function lsSet(k, v) {
+  try { localStorage.setItem(k, v); return true; }
+  catch (e) {
+    if (Date.now() - lsFailAt > 600000) {
+      lsFailAt = Date.now();
+      showErr('端末への保存に失敗しました（保存容量が足りない可能性があります）。「全部まとめて書き出す」で控えを取ってください');
+    }
+    return false;
+  }
+}
+// エラーの文を日本語にする（分からないものは元の文を括弧で残す）
+function jaErr(e) {
+  const m = String((e && (e.message || e.name)) || e || '');
+  if (e && e.name === 'AbortError') return '時間切れ';
+  if (e && e.name === 'QuotaExceededError') return '保存容量が足りません';
+  if (/[ぁ-んァ-ヶ一-龠]/.test(m)) return m; // もともと日本語の文（中の HTTP 番号などもそのまま）
+  if (/Failed to fetch|NetworkError|Load failed|network error/i.test(m)) return '通信できませんでした（電波・接続を確認してください）';
+  const h = m.match(/HTTP (\d{3})/);
+  if (h) {
+    const c = Number(h[1]);
+    if (c === 429) return '混雑で断られました（HTTP 429）';
+    if (c >= 500) return `相手のサーバーの不調（HTTP ${c}）`;
+    if (c === 401 || c === 403) return `利用を断られました（HTTP ${c}）`;
+    return `HTTP ${c}`;
+  }
+  return '原因不明のエラー（' + m.slice(0, 80) + '）';
+}
+function getLS(k) { try { return localStorage.getItem(k); } catch (e) { return null; } }
+const pad2 = n => String(n).padStart(2, '0');
+const ymd = t => { const d = new Date(t); return `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}`; };
+// 保存場所の使い方（文字数。同じアドレスの navi／walk／sora／yama で約500万文字を共有）
+const LS_CAP = 5000000;
+function lsUsage() {
+  let all = 0, mine = 0;
+  try {
+    for (let i = 0; i < localStorage.length; i++) {
+      const k = localStorage.key(i), n = k.length + (localStorage.getItem(k) || '').length;
+      all += n; if (k.startsWith('walk_')) mine += n;
+    }
+  } catch (e) {}
+  return {all, mine};
+}
 function loadJSON(k, d) { try { return JSON.parse(localStorage.getItem(k) || d); } catch (e) { return JSON.parse(d); } }
 let favs = loadJSON('walk_favs', '[]');
 let tracks = loadJSON('walk_tracks', '[]');
 let areaMeta = loadJSON('walk_area_meta', '[]');
 $('weight').value = localStorage.getItem('walk_weight') || '60';
-$('weight').onchange = () => { try { localStorage.setItem('walk_weight', $('weight').value); } catch (e) {} };
+$('weight').onchange = () => lsSet('walk_weight', $('weight').value);
 const weight = () => { const w = Number($('weight').value); return w > 0 ? w : 60; };
 function loadFlag(k, d) { try { const v = localStorage.getItem(k); return v === null ? d : v === '1'; } catch (e) { return d; } }
-[['vibChk', 'walk_vib', true], ['autoFollowChk', 'walk_autofollow', true], ['offChk', 'walk_offshow', false], ['meshChk', 'walk_meshshow', false]].forEach(([id, k, d]) => {
-  $(id).checked = loadFlag(k, d);
-  $(id).onchange = () => { try { localStorage.setItem(k, $(id).checked ? '1' : '0'); } catch (e) {} };
-});
+// 入・切の設定（書き出し・読み込みでも使う）。比較ルートは版5から初め「切」
+const FLAGS = [['vibChk', 'walk_vib', true], ['autoFollowChk', 'walk_autofollow', true], ['offChk', 'walk_offshow', false], ['meshChk', 'walk_meshshow', false], ['cmpChk', 'walk_cmp', false]];
+function loadFlags() { FLAGS.forEach(([id, k, d]) => { $(id).checked = loadFlag(k, d); }); }
+loadFlags();
+FLAGS.forEach(([id, k]) => $(id).addEventListener('change', () => lsSet(k, $(id).checked ? '1' : '0')));
 
 // ---------- 共通 ----------
 function showErr(m) {
@@ -104,7 +164,7 @@ const cacheGet = id => idbDo('readonly', st => st.get(id));
 const cachePut = (id, v) => idbDo('readwrite', st => st.put(v, id));
 const cacheDel = id => idbDo('readwrite', st => st.delete(id));
 const cacheClear = () => idbDo('readwrite', st => st.clear());
-function saveMeta() { try { localStorage.setItem('walk_area_meta', JSON.stringify(areaMeta)); } catch (e) {} }
+function saveMeta() { lsSet('walk_area_meta', JSON.stringify(areaMeta)); }
 
 // ---------- 標高（国土地理院の標高タイル） ----------
 // 5m間隔（航空レーザー）→ 5m間隔（写真測量）→ 10m間隔 の順に、データのあるものを使う
@@ -199,7 +259,7 @@ async function ensureElev(g) {
     g.ele = ele;
   } catch (e) {
     g.ele = null;
-    showErr('高さのデータを取得できませんでした（' + e.message + '）。坂を考えずに計算します');
+    showErr('高さのデータを取得できませんでした（' + jaErr(e) + '）。坂を考えずに計算します');
   }
   return g.ele;
 }

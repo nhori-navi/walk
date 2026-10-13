@@ -3,6 +3,7 @@
 <head>
 <meta charset="utf-8">
 <title>MichiMiru</title>
+<meta name="description" content="未踏破・坂・遊歩道・寄り道など、自分の基準で道を選ぶ徒歩ナビ">
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1">
 <link href="https://api.mapbox.com/mapbox-gl-js/v3.9.0/mapbox-gl.css" rel="stylesheet">
 <script src="https://api.mapbox.com/mapbox-gl-js/v3.9.0/mapbox-gl.js"></script>
@@ -31,6 +32,10 @@ details{margin:8px 0;background:#fff;border:1px solid #ddd;border-radius:6px;pad
 #favForm{display:none;background:#fff3cd;border-radius:6px;padding:4px 6px;margin:4px 0}
 .me{width:34px;height:34px;position:relative}
 .me .dot{position:absolute;left:8px;top:8px;width:18px;height:18px;border-radius:50%;background:#1e90ff;border:3px solid #fff;box-shadow:0 0 6px rgba(0,0,0,.5)}
+.me.rough .dot{background:#999}
+#warn{display:none;background:#fff3cd;border:1px solid #e0a800;border-radius:6px;padding:6px 8px;margin:4px 0;font-size:14px}
+#impBox{display:none;background:#fff3cd;border:1px solid #e0a800;border-radius:6px;padding:6px 8px;margin:6px 0;font-size:14px}
+#loc{line-height:1.5}
 .me .arw{position:absolute;left:11px;top:0;width:0;height:0;border-left:6px solid transparent;border-right:6px solid transparent;border-bottom:10px solid #1e90ff;display:none}
 .lg{display:inline-block;width:14px;height:4px;vertical-align:middle;margin:0 2px 0 6px}
 #hud{position:absolute;top:8px;left:8px;z-index:5;display:none;background:rgba(255,255,255,.9);border-radius:8px;padding:6px 10px;box-shadow:0 1px 4px rgba(0,0,0,.3);line-height:1.4;font-size:14px}
@@ -62,12 +67,14 @@ body.walking.menu #panel{display:block;top:50%;bottom:52px;left:0;right:0;width:
   <div id="sub"></div>
   <canvas id="prof"></canvas>
   <div id="result"></div>
+  <div id="warn"><div id="warnText"></div><button id="warnPick">出発地を地図で選ぶ</button><button id="warnForce">それでもこの位置で計算</button></div>
   <div id="today" class="row" style="font-weight:bold;color:#1e7e34"></div>
   <div><button id="walkBtn">記録だけ始める</button></div>
   <div><input id="search" placeholder="目的地（駅名・施設名・住所）"><button id="searchBtn">検索</button></div>
   <div id="hits"></div>
   <div id="favBar"></div>
   <div id="favForm" class="row">名前：<input id="favName" style="width:50%"><button id="favSave">保存</button><button id="favCancel">やめる</button></div>
+  <div><button id="fromBtn">出発地を地図で選ぶ</button><button id="fromClear" style="display:none">現在地から出発に戻す</button></div>
   <div><button id="pickBtn">地図で指定</button><button id="viaBtn">経由地を追加</button><button id="viaUndo" disabled>1つ戻す</button><button id="viaClear" disabled>全部消す</button></div>
   <div><button id="recalcBtn" disabled>再計算</button><button id="followBtn">追従：ON</button><button id="headBtn">向き：北が上</button><button id="favAdd" disabled>★登録</button><button id="routeClear">ルートを消す</button></div>
   <div class="row">延長：<select id="ext">
@@ -82,11 +89,12 @@ body.walking.menu #panel{display:block;top:50%;bottom:52px;left:0;right:0;width:
   <div class="row">周回：<select id="loopKm"><option>1</option><option>2</option><option selected>3</option><option>5</option></select>km
     <button id="loopBtn">周回コースを作る</button></div>
   <div class="small"><label><input type="checkbox" id="walkedChk" checked>歩いた道（緑）</label>　<label><input type="checkbox" id="vehChk">乗り物の区間（赤）</label></div>
-  <div class="small"><label><input type="checkbox" id="cmpChk" checked>比較用にMapboxの徒歩ルートを表示（点線）</label></div>
+  <div class="small"><label><input type="checkbox" id="cmpChk">比較用にMapboxの徒歩ルートを表示（点線。入にすると、出発地・経由地・目的地の座標を Mapbox 社に送ります）</label></div>
   <div class="small"><label><input type="checkbox" id="poiShow">地図に神社・寺・公園を表示（印をタップすると名前）</label></div>
   <div class="small"><label><input type="checkbox" id="netChk">道のデータを表示</label><br>
     <span class="lg" style="background:#8a9a9a"></span>通れる道<span class="lg" style="background:#f39c12"></span>階段<span class="lg" style="background:#9b59b6"></span>つながっていない道<span class="lg" style="background:#e74c3c"></span>通行不可の印</div>
-  <div id="status" class="small">現在地を取得中…</div>
+  <div id="loc" class="small">現在地を取得中…</div>
+  <div id="status" class="small"></div>
   <div id="err" class="small" style="color:#c00"></div>
     <details>
     <summary id="playSum">あそぶ（踏破マス・スタンプ帳・東海道）</summary>
@@ -96,24 +104,29 @@ body.walking.menu #panel{display:block;top:50%;bottom:52px;left:0;right:0;width:
     <div id="tkText" class="small" style="color:#333;line-height:1.6"></div>
     <div style="background:#eee;border-radius:4px;height:8px;margin:4px 0"><div id="tkBar" style="background:#e67e22;height:8px;border-radius:4px;width:0"></div></div>
     <button id="tkReset">最初からやり直す</button>
+    <div class="small">宿場間の距離：川口市の資料（東海道五十三次のおおよその距離）による</div>
     <div id="stampStat" class="row" style="margin-top:10px"></div>
     <div class="small">名前のある神社・寺・公園の50m以内を通るとスタンプが押されます（神社・寺・公園のデータを読み込んだ範囲だけ）。名前をタップすると地図で場所を表示します。</div>
     <div id="stampList" style="max-height:220px;overflow:auto;border:1px solid #eee;border-radius:4px"></div>
   </details>
   <details>
     <summary>歩いた記録の管理</summary>
-    <div class="small">OpenTracksのGPXファイル（Download/opentracks）を選んでください（複数可）。同じファイルを読み込み直すと、前回分を置き換えます。同じ時間帯にこのアプリで取った記録があれば、そちらは消してOpenTracksの記録を残します。書き出したファイル（.json）を選ぶと、記録を復元できます。</div>
+    <div class="small">記録はこの端末のこのブラウザの中にあります。パソコンとスマホでは別々です。機種変更やアドレスの引っ越しの前に「全部まとめて書き出す」で控えを取ってください（歩いた記録・スタンプ帳・お気に入り・体重・設定・東海道が1つのファイルに入ります）。</div>
+    <div id="iosNote" class="small" style="display:none;color:#c0392b">iPhone の Safari は、7日使わないとこのサイトの記録を消すことがあります。ときどき書き出してください。</div>
+    <button id="recExport">全部まとめて書き出す</button>
+    <div id="bkLast" class="small"></div>
+    <div class="small" style="color:#c0392b">書き出したファイルには、歩いた日時と道がすべて入っています。人に渡さないでください。</div>
+    <div class="small">「記録を読み込む」：書き出したファイル（.json）は、中身を確かめてから今の記録に足し合わせます（今の記録は消えません）。OpenTracks の GPX ファイル（Download/opentracks）も選べます（複数可）。同じ GPX を読み込み直すと前回分を置き換え、同じ時間帯にこのアプリで取った記録があれば、そちらは消して OpenTracks の記録を残します。</div>
     <input type="file" id="recFile" multiple style="display:none">
-    <button id="recImport">記録を読み込む</button><button id="recExport">記録を書き出す</button><br>
+    <button id="recImport">記録を読み込む</button>
+    <div id="impBox"><div id="impText"></div><button id="impOk">読み込む</button><button id="impNo">やめる</button></div>
     <button id="recClear">記録をすべて消す</button>
     <div id="recStat" class="small"></div>
   </details>
   <details>
     <summary>お気に入りの管理</summary>
     <div id="favList"></div>
-    <div class="small">端末間で移すとき：書き出し → 文字をコピー → 別の端末に貼って読み込み</div>
-    <textarea id="favText" rows="3" style="width:100%"></textarea>
-    <button id="favExport">書き出し</button><button id="favImport">読み込み</button>
+    <div class="small">別の端末へ移すときは、「歩いた記録の管理」の「全部まとめて書き出す」に入っています。</div>
   </details>
   <details>
     <summary>設定</summary>
@@ -125,7 +138,19 @@ body.walking.menu #panel{display:block;top:50%;bottom:52px;left:0;right:0;width:
     <div class="row"><label><input type="checkbox" id="offChk">道から30m以上外れた記録も薄く表示する（灰色の点線。距離や今日の合計には入れていません）</label></div>
     <div class="row"><label><input type="checkbox" id="autoFollowChk">歩行中、地図を触ってから20秒たったら現在地の追従に戻す</label></div>
   </details>
-  <div class="small">道路・名称検索データ © OpenStreetMap contributors／標高：国土地理院（標高タイル）<br>MichiMiru（徒歩ナビ）　<span id="ver"></span></div>
+  <details>
+    <summary>この端末の外へ送る情報</summary>
+    <div class="small" style="color:#333;line-height:1.6">
+    MichiMiru には運営者のサーバーがなく、運営者には何も送りません。記録・お気に入り・設定はこの端末の中だけにあります。地図や道のデータを受け取るために、次の情報を各サービスに送ります（通信の性質上、送り先にはこの端末の IP アドレスとブラウザの種類も伝わります）。<br>
+    ・地図：表示している範囲 → Mapbox 社<br>
+    ・道と神社・寺・公園のデータ：出発地・目的地のまわりの範囲（数km四方。先読みは約500m単位に丸める）→ OpenStreetMap の公開サーバー（Overpass：ドイツの本家、private.coffee、kumi の順に頼む）<br>
+    ・坂の計算：ルートのまわりの標高タイルの番号 → 国土地理院<br>
+    ・名称検索：検索した文字と、出発地のまわり約60km四方の範囲（約500m単位に丸める）→ OpenStreetMap 財団（Nominatim）<br>
+    ・住所検索：検索した文字だけ → 国土地理院<br>
+    ・比較ルート（入にしたときだけ）：出発地・経由地・目的地の座標 → Mapbox 社
+    </div>
+  </details>
+  <div class="small">道路・名称検索データ © OpenStreetMap contributors／標高・住所検索：国土地理院／東海道の宿場間の距離：川口市の資料<br>MichiMiru　<span id="ver"></span></div>
 </div>
 <script>
 // ファイルの読み込みに失敗したとき（ファイルの作り忘れ・名前の打ち間違いなど）に、画面に知らせる
@@ -135,12 +160,12 @@ window.addEventListener('error', e => {
   if (el) el.textContent = el.textContent ? el.textContent + ' ／ ' + m : m;
 }, true);
 </script>
-<script src="config.js?v=4"></script>
-<script src="base.js?v=4"></script>
-<script src="road.js?v=4"></script>
-<script src="poi.js?v=4"></script>
-<script src="walk.js?v=4"></script>
-<script src="play.js?v=4"></script>
-<script src="app.js?v=4"></script>
+<script src="config.js?v=5"></script>
+<script src="base.js?v=5"></script>
+<script src="road.js?v=5"></script>
+<script src="poi.js?v=5"></script>
+<script src="walk.js?v=5"></script>
+<script src="play.js?v=5"></script>
+<script src="app.js?v=5"></script>
 </body>
 </html>

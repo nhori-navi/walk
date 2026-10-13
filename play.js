@@ -5,10 +5,6 @@ function notify(m) {
   status(m);
   if (walk && $('vibChk').checked && navigator.vibrate) { try { navigator.vibrate([100, 80, 100, 80, 300]); } catch (e) {} }
 }
-const pad2 = n => String(n).padStart(2, '0');
-const ymd = t => { const d = new Date(t); return `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}`; };
-function setLS(k, v) { try { localStorage.setItem(k, v); } catch (e) {} }
-function getLS(k) { try { return localStorage.getItem(k); } catch (e) { return null; } }
 
 // ---------- 踏破マス（国の地域メッシュの1/8＝約125m四方。緯度3.75秒×経度5.625秒） ----------
 const MESH_Y = 3.75 / 3600, MESH_X = 5.625 / 3600;
@@ -56,7 +52,7 @@ function playLive() {
 }
 $('meshChk').addEventListener('change', playLive);
 
-// ---------- バーチャル東海道（宿場間の距離は川口市の資料の「おおよその距離」による） ----------
+// ---------- バーチャル東海道（宿場間の距離は川口市の資料の「おおよその距離」による。出典は画面に表示） ----------
 const TOKAIDO = [['日本橋', 0], ['品川宿', 7.9], ['川崎宿', 17.7], ['神奈川宿', 27.5], ['保土ヶ谷宿', 32.4], ['戸塚宿', 41.2], ['藤沢宿', 49.1],
   ['平塚宿', 62.8], ['大磯宿', 65.7], ['小田原宿', 81.4], ['箱根宿', 98.0], ['三島宿', 112.8], ['沼津宿', 118.7], ['原宿', 124.6],
   ['吉原宿', 136.4], ['蒲原宿', 147.6], ['由比宿', 151.5], ['興津宿', 160.7], ['江尻宿', 164.8], ['府中宿', 175.4], ['鞠子宿', 181.1],
@@ -82,10 +78,10 @@ function updTokaido(m) {
     const n = prog - Number(last);
     notify(`🏯 ${n > 1 ? `宿場を${n}つ進んで、` : ''}${here}に着きました！`);
   }
-  if (last === null || prog !== Number(last)) setLS('walk_tokaido_last', String(prog));
+  if (last === null || prog !== Number(last)) lsSet('walk_tokaido_last', String(prog));
 }
 twoStep($('tkReset'), '最初からやり直す', () => {
-  setLS('walk_tokaido_from', String(Date.now())); setLS('walk_tokaido_last', '0');
+  lsSet('walk_tokaido_from', String(Date.now())); lsSet('walk_tokaido_last', '0');
   drawTracks(); status('バーチャル東海道を日本橋からやり直します（今から歩いた分を数えます）');
 });
 
@@ -102,7 +98,7 @@ function addStamp(p, t) {
   if (!s.days.includes(d)) { s.days.push(d); ch = true; }
   return {neu, ch};
 }
-const saveStamps = () => setLS('walk_stamps', JSON.stringify(stamps));
+const saveStamps = () => lsSet('walk_stamps', JSON.stringify(stamps));
 // 保存されている記録から、読み込んだ範囲のスタンプをまとめて押す（過去の記録の分も）
 function updStamps() {
   const g = graph;
