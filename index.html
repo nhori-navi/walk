@@ -36,11 +36,17 @@ details{margin:8px 0;background:#fff;border:1px solid #ddd;border-radius:6px;pad
 #warn{display:none;background:#fff3cd;border:1px solid #e0a800;border-radius:6px;padding:6px 8px;margin:4px 0;font-size:14px}
 #impBox{display:none;background:#fff3cd;border:1px solid #e0a800;border-radius:6px;padding:6px 8px;margin:6px 0;font-size:14px}
 #loc{line-height:1.5}
-body.tkmode #hud,body.tkmode #reBtn{display:none!important}
-#tkTop{position:absolute;top:8px;left:8px;right:56px;z-index:7;display:none;background:rgba(255,253,245,.96);border:1px solid #e0a800;border-radius:8px;padding:6px 10px;box-shadow:0 1px 4px rgba(0,0,0,.3);font-size:14px;line-height:1.5}
-body.tkmode #tkTop{display:block}
-#tkTop a{color:#1f6fd1;margin-right:10px;font-size:13px}
-#tkClose{float:right;margin:0 0 4px 6px}
+/* 版7：東海道の地図・旅の地図のときは、地図の下の端に半透明の帯を1行だけ出す（地図の真ん中と上は空けておく） */
+body.mode-tk #hud,body.mode-tk #reBtn,body.mode-tabi #hud,body.mode-tabi #reBtn{display:none!important}
+#mbar{position:absolute;left:8px;right:8px;bottom:32px;z-index:7;display:none;background:rgba(255,253,245,.85);border:1px solid #e0a800;border-radius:8px;padding:3px 4px 3px 10px;box-shadow:0 1px 3px rgba(0,0,0,.25);font-size:14px}
+body.mode-tk #mbar,body.mode-tabi #mbar{display:block}
+#mbRow{display:flex;align-items:center;gap:4px}
+#mbLine{flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+#mbar button{margin:0;padding:2px 9px;font-size:15px;background:transparent;border:1px solid #ccc;border-radius:12px}
+#mbMore{display:none;max-height:38vh;overflow:auto;font-size:13px;line-height:1.6;border-top:1px solid #e8dcb0;margin:3px 6px 2px 0;padding-top:4px}
+#mbar.open #mbMore{display:block}
+#mbMore a{color:#1f6fd1}
+.tabiPop button{margin:3px 4px 0 0;padding:4px 10px;font-size:14px}
 .tkme{font-size:26px;line-height:1;filter:drop-shadow(0 1px 2px rgba(0,0,0,.5))}
 .me .arw{position:absolute;left:11px;top:0;width:0;height:0;border-left:6px solid transparent;border-right:6px solid transparent;border-bottom:10px solid #1e90ff;display:none}
 .lg{display:inline-block;width:14px;height:4px;vertical-align:middle;margin:0 2px 0 6px}
@@ -66,8 +72,7 @@ body.walking.menu #panel{display:block;top:50%;bottom:52px;left:0;right:0;width:
 <body>
 <div id="map"></div>
 <div id="hud"></div>
-<div id="tkTop"><button id="tkClose">× 戻る</button><div id="tkInfo"></div><div id="tkMsg" class="small"></div>
-  <a id="tkSv" target="_blank" rel="noopener">ストリートビューで見る</a><a id="tkGm" target="_blank" rel="noopener">Googleマップで見る</a></div>
+<div id="mbar"><div id="mbRow"><span id="mbLine"></span><button id="mbInfo" title="詳しく">ⓘ</button><button id="mbClose" title="閉じる">✕</button></div><div id="mbMore"></div></div>
 <div id="tab"><button id="menuBtn">▲メニュー</button><button id="wakeBtn">画面ON：切</button><button id="lockBtn">🔒ロック</button><button id="endBtn">終了</button></div>
 <div id="lock"><div id="lockBadge">🔒 ロック中　ここを長押しで解除<div id="lockBar"></div></div></div>
 <div id="panel">
@@ -121,6 +126,12 @@ body.walking.menu #panel{display:block;top:50%;bottom:52px;left:0;right:0;width:
     <div id="stampList" style="max-height:220px;overflow:auto;border:1px solid #eee;border-radius:4px"></div>
   </details>
   <details>
+    <summary>旅の地図（全国の行った市区町村）</summary>
+    <div class="small">徒歩・電車・車の記録で、全国1,741の市区町村を塗ります。歩いた所は濃い色、乗り物で通っただけの所は薄い色です。電車や車の記録は、OpenTracks の GPX を「歩いた記録の管理」から読み込んでください（このアプリは歩く速さを超えた点を記録しません）。踏破マス・東海道・スタンプは今までどおり徒歩だけで数えます。</div>
+    <div id="tabiStat" class="row"></div>
+    <button id="tabiBtn">旅の地図を見る</button>
+  </details>
+  <details>
     <summary>歩いた記録の管理</summary>
     <div class="small">記録はこの端末のこのブラウザの中にあります。パソコンとスマホでは別々です。機種変更やアドレスの引っ越しの前に「全部まとめて書き出す」で控えを取ってください（歩いた記録・スタンプ帳・お気に入り・体重・設定・東海道が1つのファイルに入ります）。</div>
     <div id="iosNote" class="small" style="display:none;color:#c0392b">iPhone の Safari は、7日使わないとこのサイトの記録を消すことがあります。ときどき書き出してください。</div>
@@ -159,10 +170,11 @@ body.walking.menu #panel{display:block;top:50%;bottom:52px;left:0;right:0;width:
     ・名称検索：検索した文字と、出発地のまわり約60km四方の範囲（約500m単位に丸める）→ OpenStreetMap 財団（Nominatim）<br>
     ・住所検索：検索した文字だけ → 国土地理院<br>
     ・比較ルート（入にしたときだけ）：出発地・経由地・目的地の座標 → Mapbox 社<br>
+    ・旅の地図：市区町村の境目と線路のデータは、このサイトから読み込みます（外のサービスには何も送りません）<br>
     ・東海道の地図：旧東海道の道筋（初めの1回だけ。あなたの場所は送りません）→ OpenStreetMap の公開サーバー。「ストリートビューで見る」「Googleマップで見る」を押したときだけ、東海道の上の今の位置（あなたの現在地ではありません）→ Google 社
     </div>
   </details>
-  <div class="small">道路・名称検索データ © OpenStreetMap contributors／標高・住所検索：国土地理院／東海道の宿場間の距離：川口市の資料<br>MichiMiru　<span id="ver"></span></div>
+  <div class="small">道路・名称検索データ © OpenStreetMap contributors／標高・住所検索：国土地理院／東海道の宿場間の距離：川口市の資料／市区町村の境目：国土数値情報（行政区域）国土交通省を加工／線路：地球地図日本（国土地理院）を加工<br>MichiMiru　<span id="ver"></span></div>
 </div>
 <script>
 // ファイルの読み込みに失敗したとき（ファイルの作り忘れ・名前の打ち間違いなど）に、画面に知らせる
@@ -172,13 +184,14 @@ window.addEventListener('error', e => {
   if (el) el.textContent = el.textContent ? el.textContent + ' ／ ' + m : m;
 }, true);
 </script>
-<script src="config.js?v=6"></script>
-<script src="base.js?v=6"></script>
-<script src="road.js?v=6"></script>
-<script src="poi.js?v=6"></script>
-<script src="walk.js?v=6"></script>
-<script src="play.js?v=6"></script>
-<script src="tokaido.js?v=6"></script>
-<script src="app.js?v=6"></script>
+<script src="config.js?v=7"></script>
+<script src="base.js?v=7"></script>
+<script src="road.js?v=7"></script>
+<script src="poi.js?v=7"></script>
+<script src="walk.js?v=7"></script>
+<script src="play.js?v=7"></script>
+<script src="tokaido.js?v=7"></script>
+<script src="tabi.js?v=7"></script>
+<script src="app.js?v=7"></script>
 </body>
 </html>

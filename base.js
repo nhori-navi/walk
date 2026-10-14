@@ -18,6 +18,34 @@ const IOS = /iPhone|iPad|iPod/.test(navigator.userAgent) || (navigator.platform 
 const isRough = () => !pos || posAcc === null || posAcc > ROUGH_M;
 // ルートの出発地：地図で選んだ場所があればそれ、なければ現在地
 const origin = () => startPt || pos;
+// ---------- 地図の切り替え（版7：東海道の地図・旅の地図）と、地図の下の端の帯 ----------
+// 帯は普段1行だけ。ⓘで詳しい説明を広げる（広げたかどうかは表示ごとに覚える）。✕で閉じていつもの地図に戻る
+let mapMode = null, modeView = null, modeCloser = null;
+function modeOpen(m, closer) {
+  if (mapMode === m) return false;
+  if (mapMode) modeClose();
+  mapMode = m; modeCloser = closer;
+  modeView = {c: map.getCenter().toArray(), z: map.getZoom()};
+  document.body.classList.add('mode-' + m);
+  $('mbar').classList.toggle('open', getLS('walk_mbar_' + m) === '1');
+  setFollow(false);
+  return true;
+}
+function modeClose() {
+  if (!mapMode) return;
+  const m = mapMode; mapMode = null;
+  document.body.classList.remove('mode-' + m);
+  if (modeCloser) modeCloser();
+  modeCloser = null; mbSet('', '');
+  if (walk) setFollow(true); else if (modeView) map.jumpTo({center: modeView.c, zoom: modeView.z});
+}
+function mbSet(line, more) {
+  $('mbLine').innerHTML = line;
+  if (more !== undefined) $('mbMore').innerHTML = more;
+}
+$('mbInfo').onclick = () => { const o = $('mbar').classList.toggle('open'); if (mapMode) lsSet('walk_mbar_' + mapMode, o ? '1' : '0'); };
+$('mbClose').onclick = modeClose;
+
 // 外へ送る前に約500m単位に丸める（0.005°）
 const round500 = p => [Math.round(p[0] / 0.005) * 0.005, Math.round(p[1] / 0.005) * 0.005];
 const fmtAcc = m => m >= 1000 ? (m / 1000).toFixed(1) + 'km' : Math.round(m) + 'm';

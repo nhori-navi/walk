@@ -13,7 +13,7 @@ map.on('load', () => {
   const empty = {type:'FeatureCollection', features:[]};
   map.addSource('acc', {type:'geojson', data:empty});
   map.addLayer({id:'acc', type:'fill', source:'acc', paint:{'fill-color':['get', 'c'], 'fill-opacity':0.13, 'fill-outline-color':['get', 'c']}});
-  ['mesh', 'off', 'walked', 'veh', 'net', 'cmp', 'route', 'poi', 'meshRem', 'tkLine', 'tkSt'].forEach(id => map.addSource(id, {type:'geojson', data:empty}));
+  ['mesh', 'off', 'walked', 'veh', 'net', 'cmp', 'route', 'poi', 'meshRem', 'tkLine', 'tkSt', 'tabiCity', 'tabiLine'].forEach(id => map.addSource(id, {type:'geojson', data:empty}));
   // 踏破マス：歩いた＝オレンジ、残り200m以下＝濃いオレンジ、完全制覇＝金色
   map.addLayer({id:'mesh', type:'fill', source:'mesh', paint:{
     'fill-color':['match', ['get', 'c'], 'done', '#f1c40f', 'near', '#d35400', '#f39c12'],
@@ -44,6 +44,13 @@ map.on('load', () => {
   map.addLayer({id:'poi', type:'circle', source:'poi', paint:{
     'circle-radius':6, 'circle-color':['match', ['get', 'k'], 'shrine', POI.shrine.col, 'temple', POI.temple.col, POI.park.col],
     'circle-stroke-color':'#fff', 'circle-stroke-width':2}});
+  // 旅の地図：歩いた市区町村は濃い色、乗り物で通っただけは薄い色。線は徒歩＝緑・電車＝紫・車＝オレンジ（直線でつないだ所は点線）
+  map.addLayer({id:'tabiCity', type:'fill', source:'tabiCity', paint:{'fill-color':['match', ['get', 'w'], 1, '#16a085', '#76d7c4'],
+    'fill-opacity':['match', ['get', 'w'], 1, 0.45, 0.25], 'fill-outline-color':'#0e6655'}});
+  const tabiCol = ['match', ['get', 'm'], 'train', TABI_MODE.train.col, 'car', TABI_MODE.car.col, TABI_MODE.walk.col];
+  map.addLayer({id:'tabiLine', type:'line', source:'tabiLine', filter:['==', ['get', 'g'], 0], layout:{'line-cap':'round', 'line-join':'round'},
+    paint:{'line-color':tabiCol, 'line-width':3}});
+  map.addLayer({id:'tabiGap', type:'line', source:'tabiLine', filter:['==', ['get', 'g'], 1], paint:{'line-color':tabiCol, 'line-width':3, 'line-dasharray':[2, 2]}});
   // マスの中のまだ歩いていない道（赤い点線）
   map.addLayer({id:'meshRem', type:'line', source:'meshRem', layout:{'line-cap':'round'},
     paint:{'line-color':'#c0392b', 'line-width':4, 'line-dasharray':[1, 1.5]}});
@@ -80,7 +87,8 @@ map.on('click', e => {
   if (pickMode === 'from') { pickMode = null; setStart(p); }
   else if (pickMode === 'dest') { pickMode = null; destName = ''; setDest(p); }
   else if (pickMode === 'via') { pickMode = null; addVia(p); }
-  else if (!tkOn && $('meshChk').checked) {
+  else if (mapMode === 'tabi') tabiTap(e);
+  else if (!mapMode && $('meshChk').checked) {
     // 踏破マスを表示しているときは、タップしたマスの残りを出す（神社・寺・公園の印をタップしたときは除く）
     let onPoi = false;
     try { onPoi = map.queryRenderedFeatures(e.point, {layers: ['poi']}).length > 0; } catch (er) {}
@@ -93,6 +101,7 @@ map.on('click', e => {
 const reBtn = document.createElement('button');
 reBtn.id = 'reBtn'; reBtn.textContent = '◎ 現在地に戻る';
 $('map').appendChild(reBtn);
+$('map').appendChild($('mbar')); // 東海道・旅の地図の帯は、地図の下の端に置く
 reBtn.onclick = () => setFollow(true);
 let followTimer = null;
 function setFollow(v) {

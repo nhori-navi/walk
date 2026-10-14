@@ -16,7 +16,8 @@ const TK_POS = [
 const TK_REL = 5185746;   // OpenStreetMap の「旧東海道」の登録（route のまとまり）
 const TK_SEA = 41;        // 宮宿 → 桑名宿（七里の渡し）は海の上なので、宿場どうしを点線で結ぶ
 const TK_KEY = 'tokaido_v1', TK_LIFE = 90 * 864e5; // 道筋は端末に90日保存
-let tkData = null, tkOn = false, tkMarker = null, tkView = null, tkHere = null;
+let tkData = null, tkMarker = null, tkHere = null;
+const tkOn = () => mapMode === 'tk';
 
 // ---------- 道筋を作る ----------
 // OpenStreetMap の旧東海道の道（順番はばらばら）を線の網にして、宿場から次の宿場までの道筋を探す
@@ -106,7 +107,7 @@ function tkWhere(km) {
   let i = 0; while (i + 2 < TOKAIDO.length && TOKAIDO[i + 1][1] <= r) i++;
   return {lap, r, i, f: (r - TOKAIDO[i][1]) / (TOKAIDO[i + 1][1] - TOKAIDO[i][1])};
 }
-const tkMsg = m => { $('tkMsg').textContent = m; };
+const tkMsg = m => { if (tkOn()) mbSet('🏯 ' + esc(m)); };
 const tkLineF = (c, done, gap) => ({type: 'Feature', properties: {d: done ? 1 : 0, g: gap ? 1 : 0}, geometry: {type: 'LineString', coordinates: c}});
 function tkDraw(d, fly) {
   const w = tkWhere(tkKm), feats = [];
@@ -132,34 +133,28 @@ function tkDraw(d, fly) {
   if (!tkMarker) { const el = document.createElement('div'); el.className = 'tkme'; el.textContent = '🚶'; tkMarker = new mapboxgl.Marker({element: el}); }
   tkMarker.setLngLat(here).addTo(map);
   if (fly) map.jumpTo({center: here, zoom: 13});
-  const nx = TOKAIDO[w.i + 1];
-  $('tkInfo').innerHTML = `🏯 ${w.lap ? `${w.lap + 1}周目　` : ''}${w.i === 0 ? '日本橋を出発して' : esc(TOKAIDO[w.i][0]) + 'を過ぎて'} ${(w.r - TOKAIDO[w.i][1]).toFixed(1)}km` +
-    `（${esc(nx[0])}まで あと ${(nx[1] - w.r).toFixed(1)}km）<br><span class="small">全行程 ${w.r.toFixed(1)}km／${TK_LEN}km</span>`;
-  const ng = d.secs.filter(s => !s.ok).length - 1; // 七里の渡しは数えない
-  tkMsg((w.i === TK_SEA ? '宮宿から桑名宿までは「七里の渡し」（船）で海の上を進みます。' : '') +
-    (ng >= d.secs.length - 1 ? '旧東海道の道筋が取れなかったため、宿場どうしを直線で結んでいます（次に開いたときにもう一度取りに行きます）。'
-      : ng > 0 ? `道筋：OpenStreetMap の旧東海道（${ng}区間は道筋が分からず、宿場どうしを点線で結んでいます）。` : '道筋：OpenStreetMap の旧東海道。'));
+  const nx = TOKAIDO[w.i + 1], ng = d.secs.filter(s => !s.ok).length - 1; // 七里の渡しは数えない
   const ll = `${here[1].toFixed(6)},${here[0].toFixed(6)}`;
-  $('tkSv').href = `https://www.google.com/maps/@?api=1&map_action=pano&viewpoint=${ll}`;
-  $('tkGm').href = `https://www.google.com/maps/search/?api=1&query=${ll}`;
+  // 帯の1行：「🏯 品川宿＋8.1km・川崎宿まで 1.7km」。詳しいことは ⓘ の中
+  mbSet(`🏯 ${w.lap ? `${w.lap + 1}周目・` : ''}${esc(TOKAIDO[w.i][0])}＋${(w.r - TOKAIDO[w.i][1]).toFixed(1)}km・${esc(nx[0])}まで ${(nx[1] - w.r).toFixed(1)}km`,
+    `${w.i === 0 ? '日本橋を出発して' : esc(TOKAIDO[w.i][0]) + 'を過ぎて'} ${(w.r - TOKAIDO[w.i][1]).toFixed(1)}km（${esc(nx[0])}まで あと ${(nx[1] - w.r).toFixed(1)}km）。全行程 ${w.r.toFixed(1)}km／${TK_LEN}km` +
+    (w.lap ? `（京都に${w.lap}回着きました）` : '') + '<br>' +
+    (w.i === TK_SEA ? '宮宿から桑名宿までは「七里の渡し」（船）で海の上を進みます。<br>' : '') +
+    (ng >= d.secs.length - 1 ? '旧東海道の道筋が取れなかったため、宿場どうしを直線で結んでいます（次に開いたときにもう一度取りに行きます）。'
+      : ng > 0 ? `道筋：OpenStreetMap の旧東海道（${ng}区間は道筋が分からず、宿場どうしを点線で結んでいます）。` : '道筋：OpenStreetMap の旧東海道。') +
+    `<br><a target="_blank" rel="noopener" href="https://www.google.com/maps/@?api=1&map_action=pano&viewpoint=${ll}">ストリートビューで見る</a>　` +
+    `<a target="_blank" rel="noopener" href="https://www.google.com/maps/search/?api=1&query=${ll}">Googleマップで見る</a>`);
 }
 async function tkOpen() {
-  if (tkOn) return;
-  tkOn = true; document.body.classList.add('tkmode');
-  tkView = {c: map.getCenter().toArray(), z: map.getZoom()};
-  setFollow(false);
-  $('tkInfo').textContent = '🏯 東海道の地図'; tkMsg('');
+  if (!modeOpen('tk', tkClear)) return;
+  mbSet('🏯 東海道の地図を準備中…', '');
   const d = await tkLoad();
-  if (tkOn) tkDraw(d, true);
+  if (tkOn()) tkDraw(d, true);
 }
-function tkClose() {
-  if (!tkOn) return;
-  tkOn = false; document.body.classList.remove('tkmode');
+function tkClear() {
   setData('tkLine', []); setData('tkSt', []);
   if (tkMarker) tkMarker.remove();
-  if (walk) setFollow(true); else if (tkView) map.jumpTo({center: tkView.c, zoom: tkView.z});
 }
 // 歩いて東海道の距離が増えたら、開いている地図も描き直す（play.js の updTokaido から呼ぶ）
-function tkRefresh() { if (tkOn && tkData) tkDraw(tkData, false); }
+function tkRefresh() { if (tkOn() && tkData) tkDraw(tkData, false); }
 $('tkMapBtn').onclick = tkOpen;
-$('tkClose').onclick = tkClose;

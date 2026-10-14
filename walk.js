@@ -324,6 +324,7 @@ function updToday() {
 function afterTracksChanged() {
   if (graph) markWalked(graph);
   drawTracks();
+  if (typeof tabiRefresh === 'function') tabiRefresh(); // 旅の地図を開いていれば描き直す
   if (route && cands[candIdx] && cands[candIdx].idx && graph) { route.ur = unexpRatio(graph, cands[candIdx].idx); showSummary(); }
 }
 $('walkedChk').onchange = drawTracks;
@@ -483,6 +484,7 @@ function applyBackup(b) {
     const o = {k: t.k === 'veh' ? 'veh' : 'walk', t0: t.t0, src: t.src, pts: t.pts};
     if (typeof t.t1 === 'number') o.t1 = t.t1;
     if (typeof t.kcal === 'number') o.kcal = t.kcal;
+    if (t.mode === 'train' || t.mode === 'car') o.mode = t.mode;
     tracks.push(o); have.add(trackKey(t)); n++;
   });
   // スタンプ帳も合わせる（行った日は両方の分を足す）
@@ -547,11 +549,17 @@ $('recFile').onchange = async () => {
       }
       const segs = parseGpx(txt); gpx++;
       const before = tracks.length;
+      // 同じ GPX を読み込み直しても、電車・車を手で直した分は残す
+      const kept = new Map(tracks.filter(t => t.src === f.name && t.mode).map(t => [t.t0 + '|' + t.k, t.mode]));
       tracks = tracks.filter(t => t.src !== f.name);
       if (tracks.length < before) replaced++;
       // OpenTracksはGPSが途切れると区切り（trkseg）を分けるので、1本につなげてから判定する
       const all = segs.flat();
-      if (all.length >= 2) { const o = processSeg(all, f.name); dup += dropDup(o); tracks.push(...o); added += o.length; }
+      if (all.length >= 2) {
+        const o = processSeg(all, f.name);
+        o.forEach(t => { const m = kept.get(t.t0 + '|' + t.k); if (m) t.mode = m; });
+        dup += dropDup(o); tracks.push(...o); added += o.length;
+      }
     } catch (e) { bad++; showErr(`${f.name}：${jaErr(e)}`); }
   }
   if (gpx) {
