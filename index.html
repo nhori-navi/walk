@@ -81,7 +81,7 @@ body.walking.menu #panel{display:block;top:50%;bottom:52px;left:0;right:0;width:
   <canvas id="prof"></canvas>
   <div id="result"></div>
   <div id="warn"><div id="warnText"></div><button id="warnPick">出発地を地図で選ぶ</button><button id="warnForce">それでもこの位置で計算</button></div>
-  <div id="today" class="row" style="font-weight:bold;color:#1e7e34"></div>
+  <div class="row" style="font-weight:bold;color:#1e7e34"><span id="today"></span></div>
   <div><button id="walkBtn">記録だけ始める</button></div>
   <div><input id="search" placeholder="目的地（駅名・施設名・住所）"><button id="searchBtn">検索</button></div>
   <div id="hits"></div>
@@ -106,11 +106,11 @@ body.walking.menu #panel{display:block;top:50%;bottom:52px;left:0;right:0;width:
   <div class="small"><label><input type="checkbox" id="poiShow">地図に神社・寺・公園を表示（印をタップすると名前）</label></div>
   <div class="small"><label><input type="checkbox" id="netChk">道のデータを表示</label><br>
     <span class="lg" style="background:#8a9a9a"></span>通れる道<span class="lg" style="background:#f39c12"></span>階段<span class="lg" style="background:#9b59b6"></span>つながっていない道<span class="lg" style="background:#e74c3c"></span>通行不可の印</div>
-  <div id="loc" class="small">現在地を取得中…</div>
+  <div class="small"><span id="loc">現在地を取得中…</span></div>
   <div id="status" class="small"></div>
   <div id="err" class="small" style="color:#c00"></div>
     <details>
-    <summary id="playSum">あそぶ（踏破マス・スタンプ帳・東海道）</summary>
+    <summary><span id="playSum">あそぶ（踏破マス・スタンプ帳・東海道）</span></summary>
     <div id="meshStat" class="row"></div>
     <div class="small"><label><input type="checkbox" id="meshChk">地図に踏破マスを表示（約125m四方。国の地域メッシュの区切り）</label></div>
     <div class="small">マスの中の道を全部（残り30m未満まで）歩くと完全制覇で金色になります。表示中にマスをタップすると、残りの長さと、まだ歩いていない道（赤い点線）が出ます。車道沿いの別線の歩道・横断歩道・駐車場の通路は数えません。道のデータを読み込んだ範囲のマスだけ判定できます。</div>
@@ -184,14 +184,15 @@ window.addEventListener('error', e => {
   if (el) el.textContent = el.textContent ? el.textContent + ' ／ ' + m : m;
 }, true);
 </script>
-<script src="config.js?v=7"></script>
-<script src="base.js?v=7"></script>
-<script src="road.js?v=7"></script>
-<script src="poi.js?v=7"></script>
-<script src="walk.js?v=7"></script>
-<script src="play.js?v=7"></script>
-<script src="tokaido.js?v=7"></script>
-<script src="tabi.js?v=7"></script>
-<script src="app.js?v=7"></script>
+<script src="config.js?v=8"></script>
+<script src="base.js?v=8"></script>
+<script src="road.js?v=8"></script>
+<script src="poi.js?v=8"></script>
+<script src="walk.js?v=8"></script>
+<script src="play.js?v=8"></script>
+<script src="tokaido.js?v=8"></script>
+<script src="tabi.js?v=8"></script>
+<script src="app.js?v=8"></script>
+<script src="help.js?v=8"></script>
 </body>
 </html>
