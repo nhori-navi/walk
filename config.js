@@ -1,5 +1,5 @@
 // MichiMiru：設定（トークンと各種の値）
-// 読み込み順：config → base → road → poi → walk → play → tokaido → tabi → app → help（index.html の <script> の順番）
+// 読み込み順：config → base → road → poi → walk → play → tokaido → tabi → app → ui → help（index.html の <script> の順番）
 // ▼▼▼ トークン ▼▼▼
 const TOKEN = 'pk.eyJ1IjoiaG9yaWhha28iLCJhIjoiY211djd0ejljMDA5ZjMycHYxaTY3M3BsdSJ9.a1yefJYynC4k_YvllM5DVw';
 // ▲▲▲▲▲▲▲▲▲▲▲▲
@@ -22,4 +22,4 @@ const NET_COLOR = {ok:'#8a9a9a', steps:'#f39c12', iso:'#9b59b6', ng:'#e74c3c'};
 // 遊歩道を優先するときの重み（[歩行者の道, 住宅街などの道, 大きな道]の順。なし／弱／強）
 const FOOT_F = [[1, 1, 1], [1, 1.1, 1.3], [1, 1.25, 1.6]];
 const POI = {shrine: {ic: '⛩', nm: '神社', col: '#c0392b'}, temple: {ic: '卍', nm: '寺', col: '#8e44ad'}, park: {ic: '🌳', nm: '公園', col: '#27ae60'}};
-const APP_VER = 8; // index.html の ?v= と同じ番号にする
+const APP_VER = 9; // index.html の ?v= と同じ番号にする

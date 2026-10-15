@@ -76,91 +76,132 @@ body.walking.menu #panel{display:block;top:50%;bottom:52px;left:0;right:0;width:
 <div id="tab"><button id="menuBtn">▲メニュー</button><button id="wakeBtn">画面ON：切</button><button id="lockBtn">🔒ロック</button><button id="endBtn">終了</button></div>
 <div id="lock"><div id="lockBadge">🔒 ロック中　ここを長押しで解除<div id="lockBar"></div></div></div>
 <div id="panel">
-  <div id="rem">目的地を設定してください</div>
-  <div id="sub"></div>
-  <canvas id="prof"></canvas>
-  <div id="result"></div>
   <div id="warn"><div id="warnText"></div><button id="warnPick">出発地を地図で選ぶ</button><button id="warnForce">それでもこの位置で計算</button></div>
-  <div class="row" style="font-weight:bold;color:#1e7e34"><span id="today"></span></div>
-  <div><button id="walkBtn">記録だけ始める</button></div>
-  <div><input id="search" placeholder="目的地（駅名・施設名・住所）"><button id="searchBtn">検索</button></div>
-  <div id="hits"></div>
-  <div id="favBar"></div>
-  <div id="favForm" class="row">名前：<input id="favName" style="width:50%"><button id="favSave">保存</button><button id="favCancel">やめる</button></div>
-  <div><button id="fromBtn">出発地を地図で選ぶ</button><button id="fromClear" style="display:none">現在地から出発に戻す</button></div>
-  <div><button id="pickBtn">地図で指定</button><button id="viaBtn">経由地を追加</button><button id="viaUndo" disabled>1つ戻す</button><button id="viaClear" disabled>全部消す</button></div>
-  <div><button id="recalcBtn" disabled>再計算</button><button id="followBtn">追従：ON</button><button id="headBtn">向き：北が上</button><button id="favAdd" disabled>★登録</button><button id="routeClear">ルートを消す</button></div>
-  <div class="row">延長：<select id="ext">
-      <option value="0">なし</option><option value="300">＋300m</option><option value="500">＋500m</option>
-      <option value="1000">＋1km</option><option value="2000">＋2km</option></select>
-    未踏破を優先：<select id="unexp"><option value="1">なし</option><option value="1.3">弱</option><option value="1.6">強</option><option value="3">最強</option></select>
-    <button id="altBtn" disabled>別の案</button></div>
-  <div class="row">坂：<select id="slope"><option value="0">気にしない</option><option value="1">なるべく避ける（階段も）</option><option value="2">あえて選ぶ</option></select></div>
-  <div class="row">寄り道：<label><input type="checkbox" id="poiShrine">⛩神社</label>　<label><input type="checkbox" id="poiTemple">卍寺</label>　<label><input type="checkbox" id="poiPark">🌳公園</label>
-    数：<select id="poiN"><option>1</option><option>2</option><option>3</option></select></div>
-  <div class="row">遊歩道を優先：<select id="foot"><option value="0">なし</option><option value="1">弱</option><option value="2">強</option></select></div>
-  <div class="row">周回：<select id="loopKm"><option>1</option><option>2</option><option selected>3</option><option>5</option></select>km
-    <button id="loopBtn">周回コースを作る</button></div>
-  <div class="small"><label><input type="checkbox" id="walkedChk" checked>歩いた道（緑）</label>　<label><input type="checkbox" id="vehChk">乗り物の区間（赤）</label></div>
-  <div class="small"><label><input type="checkbox" id="cmpChk">比較用にMapboxの徒歩ルートを表示（点線。入にすると、出発地・経由地・目的地の座標を Mapbox 社に送ります）</label></div>
-  <div class="small"><label><input type="checkbox" id="poiShow">地図に神社・寺・公園を表示（印をタップすると名前）</label></div>
-  <div class="small"><label><input type="checkbox" id="netChk">道のデータを表示</label><br>
-    <span class="lg" style="background:#8a9a9a"></span>通れる道<span class="lg" style="background:#f39c12"></span>階段<span class="lg" style="background:#9b59b6"></span>つながっていない道<span class="lg" style="background:#e74c3c"></span>通行不可の印</div>
-  <div class="small"><span id="loc">現在地を取得中…</span></div>
   <div id="status" class="small"></div>
   <div id="err" class="small" style="color:#c00"></div>
-    <details>
-    <summary><span id="playSum">あそぶ（踏破マス・スタンプ帳・東海道）</span></summary>
-    <div id="meshStat" class="row"></div>
-    <div class="small"><label><input type="checkbox" id="meshChk">地図に踏破マスを表示（約125m四方。国の地域メッシュの区切り）</label></div>
-    <div class="small">マスの中の道を全部（残り30m未満まで）歩くと完全制覇で金色になります。表示中にマスをタップすると、残りの長さと、まだ歩いていない道（赤い点線）が出ます。車道沿いの別線の歩道・横断歩道・駐車場の通路は数えません。道のデータを読み込んだ範囲のマスだけ判定できます。</div>
-    <div class="row" style="margin-top:6px">あと少しのマス（残り200m以下・近い順）</div>
-    <div id="nearList" style="border:1px solid #eee;border-radius:4px"></div>
-    <div class="row" style="margin-top:10px">🏯 バーチャル東海道（日本橋→京都三条大橋 約495km）</div>
-    <div id="tkText" class="small" style="color:#333;line-height:1.6"></div>
-    <div style="background:#eee;border-radius:4px;height:8px;margin:4px 0"><div id="tkBar" style="background:#e67e22;height:8px;border-radius:4px;width:0"></div></div>
-    <button id="tkMapBtn">地図で見る</button><button id="tkReset">最初からやり直す</button>
-    <div class="small">宿場間の距離：川口市の資料（東海道五十三次のおおよその距離）による。「地図で見る」は、OpenStreetMap の旧東海道の道筋の上に今の位置を出します（宿場の位置は国土地理院の住所検索で調べた本陣のあった町）。</div>
-    <div id="stampStat" class="row" style="margin-top:10px"></div>
-    <div class="small">名前のある神社・寺・公園の50m以内を通るとスタンプが押されます（神社・寺・公園のデータを読み込んだ範囲だけ）。名前をタップすると地図で場所を表示します。</div>
-    <div id="stampList" style="max-height:220px;overflow:auto;border:1px solid #eee;border-radius:4px"></div>
-  </details>
-  <details>
-    <summary>旅の地図（全国の行った市区町村）</summary>
-    <div class="small">徒歩・電車・車の記録で、全国1,741の市区町村を塗ります。歩いた所は濃い色、乗り物で通っただけの所は薄い色です。電車や車の記録は、OpenTracks の GPX を「歩いた記録の管理」から読み込んでください（このアプリは歩く速さを超えた点を記録しません）。踏破マス・東海道・スタンプは今までどおり徒歩だけで数えます。</div>
-    <div id="tabiStat" class="row"></div>
-    <button id="tabiBtn">旅の地図を見る</button>
-  </details>
-  <details>
-    <summary>歩いた記録の管理</summary>
-    <div class="small">記録はこの端末のこのブラウザの中にあります。パソコンとスマホでは別々です。機種変更やアドレスの引っ越しの前に「全部まとめて書き出す」で控えを取ってください（歩いた記録・スタンプ帳・お気に入り・体重・設定・東海道が1つのファイルに入ります）。</div>
-    <div id="iosNote" class="small" style="display:none;color:#c0392b">iPhone の Safari は、7日使わないとこのサイトの記録を消すことがあります。ときどき書き出してください。</div>
-    <button id="recExport">全部まとめて書き出す</button>
-    <div id="bkLast" class="small"></div>
-    <div class="small" style="color:#c0392b">書き出したファイルには、歩いた日時と道がすべて入っています。人に渡さないでください。</div>
-    <div class="small">「記録を読み込む」：書き出したファイル（.json）は、中身を確かめてから今の記録に足し合わせます（今の記録は消えません）。OpenTracks の GPX ファイル（Download/opentracks）も選べます（複数可）。同じ GPX を読み込み直すと前回分を置き換え、同じ時間帯にこのアプリで取った記録があれば、そちらは消して OpenTracks の記録を残します。</div>
-    <input type="file" id="recFile" multiple style="display:none">
-    <button id="recImport">記録を読み込む</button>
-    <div id="impBox"><div id="impText"></div><button id="impOk">読み込む</button><button id="impNo">やめる</button></div>
-    <button id="recClear">記録をすべて消す</button>
-    <div id="recStat" class="small"></div>
-  </details>
-  <details>
-    <summary>お気に入りの管理</summary>
-    <div id="favList"></div>
-    <div class="small">別の端末へ移すときは、「歩いた記録の管理」の「全部まとめて書き出す」に入っています。</div>
-  </details>
-  <details>
-    <summary>設定</summary>
-    <div class="row">体重：<input id="weight" type="number" min="20" max="200" step="0.5" style="width:90px">kg（カロリー計算用。この端末の中にだけ保存）</div>
-    <div class="small">道のデータはこの端末に30日間保存して使い回します。OpenStreetMapを書き足したあとなどは、下のボタンで取り直してください。</div>
-    <button id="netReset">道のデータを取り直す</button>
-    <div class="row"><label><input type="checkbox" id="vibChk">曲がり角の手前で振動する（Androidのみ）</label> <button id="vibTest">振動テスト</button></div>
-    <div id="vibMsg" class="small"></div>
-    <div class="row"><label><input type="checkbox" id="offChk">道から30m以上外れた記録も薄く表示する（灰色の点線。距離や今日の合計には入れていません）</label></div>
-    <div class="row"><label><input type="checkbox" id="autoFollowChk">歩行中、地図を触ってから20秒たったら現在地の追従に戻す</label></div>
-  </details>
-  <details>
+
+  <!-- ルート -->
+  <section class="pane" id="tab-route">
+    <div class="card" id="routeCard">
+      <div id="rem">目的地を設定してください</div>
+      <div id="sub"></div>
+      <canvas id="prof"></canvas>
+      <div id="result"></div>
+      <div class="acts"><button id="walkBtn" class="primary">記録だけ始める</button><button id="altBtn" disabled>別の案</button><button id="favAdd" disabled>★登録</button><button id="recalcBtn" disabled>再計算</button><button id="routeClear">✕ ルートを消す</button></div>
+      <div id="favForm" class="row">名前：<input id="favName" style="width:50%"><button id="favSave">保存</button><button id="favCancel">やめる</button></div>
+    </div>
+    <div class="card">
+      <div class="ch">目的地</div>
+      <div class="srow"><input id="search" placeholder="駅名・施設名・住所"><button id="searchBtn" class="primary">検索</button></div>
+      <div id="hits"></div>
+      <div id="favBar"></div>
+      <div class="acts"><button id="pickBtn">📍 地図で指定</button><button id="viaBtn">＋ 経由地</button><button id="viaUndo" disabled>1つ戻す</button><button id="viaClear" disabled>経由地を全部消す</button></div>
+      <div class="acts"><button id="fromBtn">出発地を地図で選ぶ</button><button id="fromClear" style="display:none">現在地から出発に戻す</button></div>
+    </div>
+    <div class="card">
+      <div class="ch">周回コース</div>
+      <div class="row">距離：<select id="loopKm"><option>1</option><option>2</option><option selected>3</option><option>5</option></select></div>
+      <div class="acts"><button id="loopBtn" class="primary">🔁 周回コースを作る</button></div>
+    </div>
+    <details class="card" id="prefs">
+      <summary class="ch">道の好み<span id="prefSum"></span></summary>
+      <div class="row">延長：<select id="ext">
+        <option value="0">なし</option><option value="300">＋300m</option><option value="500">＋500m</option>
+        <option value="1000">＋1km</option><option value="2000">＋2km</option></select></div>
+      <div class="row">未踏破を優先：<select id="unexp"><option value="1">なし</option><option value="1.3">弱</option><option value="1.6">強</option><option value="3">最強</option></select></div>
+      <div class="row">坂：<select id="slope"><option value="0">気にしない</option><option value="1">避ける（階段も）</option><option value="2">あえて選ぶ</option></select></div>
+      <div class="row">遊歩道を優先：<select id="foot"><option value="0">なし</option><option value="1">弱</option><option value="2">強</option></select></div>
+      <div class="row">寄り道：<span class="tg"><label><input type="checkbox" id="poiShrine">⛩神社</label><label><input type="checkbox" id="poiTemple">卍寺</label><label><input type="checkbox" id="poiPark">🌳公園</label></span></div>
+      <div class="row">寄る数：<select id="poiN"><option>1</option><option>2</option><option>3</option></select></div>
+    </details>
+    <div class="small"><span id="loc">現在地を取得中…</span></div>
+  </section>
+
+  <!-- あそぶ -->
+  <section class="pane" id="tab-play">
+    <div class="card">
+      <div class="ch"><span id="playSum">あそぶ（踏破マス・スタンプ帳・東海道）</span></div>
+      <div id="meshStat" class="row"></div>
+      <div class="small"><label><input type="checkbox" id="meshChk">地図に踏破マスを表示（約125m四方。国の地域メッシュの区切り）</label></div>
+      <div class="small">マスの中の道を全部（残り30m未満まで）歩くと完全制覇で金色になります。表示中にマスをタップすると、残りの長さと、まだ歩いていない道（赤い点線）が出ます。車道沿いの別線の歩道・横断歩道・駐車場の通路は数えません。道のデータを読み込んだ範囲のマスだけ判定できます。</div>
+      <div class="row" style="margin-top:6px">あと少しのマス（残り200m以下・近い順）</div>
+      <div id="nearList" class="lst"></div>
+    </div>
+    <div class="card">
+      <div class="ch" id="tkHead">🏯 バーチャル東海道（日本橋→京都三条大橋 約495km）</div>
+      <div id="tkText" class="small" style="color:#333;line-height:1.6"></div>
+      <div style="background:#e8ece9;border-radius:4px;height:8px;margin:4px 0"><div id="tkBar" style="background:#e67e22;height:8px;border-radius:4px;width:0"></div></div>
+      <div class="acts"><button id="tkMapBtn" class="primary">地図で見る</button><button id="tkReset">最初からやり直す</button></div>
+      <div class="small">宿場間の距離：川口市の資料（東海道五十三次のおおよその距離）による。「地図で見る」は、OpenStreetMap の旧東海道の道筋の上に今の位置を出します（宿場の位置は国土地理院の住所検索で調べた本陣のあった町）。</div>
+    </div>
+    <div class="card">
+      <div class="ch" id="stampHead">📮 スタンプ帳</div>
+      <div id="stampStat" class="row"></div>
+      <div class="small">名前のある神社・寺・公園の50m以内を通るとスタンプが押されます（神社・寺・公園のデータを読み込んだ範囲だけ）。名前をタップすると地図で場所を表示します。</div>
+      <div id="stampList" class="lst" style="max-height:220px;overflow:auto"></div>
+    </div>
+  </section>
+
+  <!-- 記録 -->
+  <section class="pane" id="tab-rec">
+    <div class="card">
+      <div class="ch" id="todayHead">📅 今日の合計</div>
+      <div class="row" style="font-weight:bold;color:#1e7e34"><span id="today"></span></div>
+    </div>
+    <div class="card">
+      <div class="ch" id="tabiHead">🗾 旅の地図（全国の行った市区町村）</div>
+      <div id="tabiStat" class="row"></div>
+      <div class="acts"><button id="tabiBtn" class="primary">旅の地図を見る</button></div>
+      <div class="small">徒歩・電車・車の記録で、全国1,741の市区町村を塗ります。歩いた所は濃い色、乗り物で通っただけの所は薄い色です。電車や車の記録は、OpenTracks の GPX を下の「記録を読み込む」から読み込んでください（このアプリは歩く速さを超えた点を記録しません）。踏破マス・東海道・スタンプは今までどおり徒歩だけで数えます。</div>
+    </div>
+    <div class="card">
+      <div class="ch" id="recHead">💾 歩いた記録の管理</div>
+      <div class="small">記録はこの端末のこのブラウザの中にあります。パソコンとスマホでは別々です。機種変更やアドレスの引っ越しの前に「全部まとめて書き出す」で控えを取ってください（歩いた記録・スタンプ帳・お気に入り・体重・設定・東海道が1つのファイルに入ります）。</div>
+      <div id="iosNote" class="small" style="display:none;color:#c0392b">iPhone の Safari は、7日使わないとこのサイトの記録を消すことがあります。ときどき書き出してください。</div>
+      <div class="acts"><button id="recExport" class="primary">全部まとめて書き出す</button><button id="recImport">記録を読み込む</button></div>
+      <div id="bkLast" class="small"></div>
+      <div class="small" style="color:#c0392b">書き出したファイルには、歩いた日時と道がすべて入っています。人に渡さないでください。</div>
+      <div class="small">「記録を読み込む」：書き出したファイル（.json）は、中身を確かめてから今の記録に足し合わせます（今の記録は消えません）。OpenTracks の GPX ファイル（Download/opentracks）も選べます（複数可）。同じ GPX を読み込み直すと前回分を置き換え、同じ時間帯にこのアプリで取った記録があれば、そちらは消して OpenTracks の記録を残します。</div>
+      <input type="file" id="recFile" multiple style="display:none">
+      <div id="impBox"><div id="impText"></div><button id="impOk">読み込む</button><button id="impNo">やめる</button></div>
+      <div id="recStat" class="small"></div>
+      <div class="acts"><button id="recClear" class="danger">記録をすべて消す</button></div>
+    </div>
+    <div class="card">
+      <div class="ch">★ お気に入りの管理</div>
+      <div id="favList"></div>
+      <div class="small">別の端末へ移すときは、「全部まとめて書き出す」に入っています。</div>
+    </div>
+  </section>
+
+  <!-- 設定 -->
+  <section class="pane" id="tab-set">
+    <div class="card">
+      <div class="ch">使い方</div>
+      <div id="helpSlot"></div>
+    </div>
+    <div class="card">
+      <div class="ch" id="viewHead">地図に出すもの</div>
+      <div class="small"><label><input type="checkbox" id="walkedChk" checked>歩いた道（緑）</label>　<label><input type="checkbox" id="vehChk">乗り物の区間（赤）</label></div>
+      <div class="small"><label><input type="checkbox" id="poiShow">神社・寺・公園（印をタップすると名前）</label></div>
+      <div class="small"><label><input type="checkbox" id="cmpChk">比較用に Mapbox の徒歩ルート（点線。入にすると、出発地・経由地・目的地の座標を Mapbox 社に送ります）</label></div>
+      <div class="small"><label><input type="checkbox" id="offChk">道から30m以上外れた記録も薄く（灰色の点線。距離や今日の合計には入れていません）</label></div>
+      <div class="small"><label><input type="checkbox" id="netChk">道のデータ</label><br>
+        <span class="lg" style="background:#8a9a9a"></span>通れる道<span class="lg" style="background:#f39c12"></span>階段<span class="lg" style="background:#9b59b6"></span>つながっていない道<span class="lg" style="background:#e74c3c"></span>通行不可の印</div>
+    </div>
+    <div class="card">
+      <div class="ch">歩いているとき</div>
+      <div class="row"><label><input type="checkbox" id="vibChk">曲がり角の手前で振動する（Androidのみ）</label> <button id="vibTest">振動テスト</button></div>
+      <div id="vibMsg" class="small"></div>
+      <div class="row"><label><input type="checkbox" id="autoFollowChk">地図を触ってから20秒たったら現在地の追従に戻す</label></div>
+      <div class="row">体重：<input id="weight" type="number" min="20" max="200" step="0.5" style="width:90px">kg（カロリー計算用。この端末の中にだけ保存）</div>
+    </div>
+    <div class="card">
+      <div class="ch" id="setHead">道のデータ</div>
+      <div class="small">道のデータはこの端末に30日間保存して使い回します。OpenStreetMap を書き足したあとなどは、下のボタンで取り直してください。</div>
+      <div class="acts"><button id="netReset">道のデータを取り直す</button></div>
+    </div>
+  <details class="card">
     <summary>この端末の外へ送る情報</summary>
     <div class="small" style="color:#333;line-height:1.6">
     MichiMiru には運営者のサーバーがなく、運営者には何も送りません。記録・お気に入り・設定はこの端末の中だけにあります。地図や道のデータを受け取るために、次の情報を各サービスに送ります（通信の性質上、送り先にはこの端末の IP アドレスとブラウザの種類も伝わります）。<br>
@@ -175,6 +216,9 @@ body.walking.menu #panel{display:block;top:50%;bottom:52px;left:0;right:0;width:
     </div>
   </details>
   <div class="small">道路・名称検索データ © OpenStreetMap contributors／標高・住所検索：国土地理院／東海道の宿場間の距離：川口市の資料／市区町村の境目：国土数値情報（行政区域）国土交通省を加工／線路：地球地図日本（国土地理院）を加工<br>MichiMiru　<span id="ver"></span></div>
+
+  </section>
+  <div id="oldBtns" style="display:none"><button id="followBtn">追従：ON</button><button id="headBtn">向き：北が上</button></div>
 </div>
 <script>
 // ファイルの読み込みに失敗したとき（ファイルの作り忘れ・名前の打ち間違いなど）に、画面に知らせる
@@ -184,15 +228,16 @@ window.addEventListener('error', e => {
   if (el) el.textContent = el.textContent ? el.textContent + ' ／ ' + m : m;
 }, true);
 </script>
-<script src="config.js?v=8"></script>
-<script src="base.js?v=8"></script>
-<script src="road.js?v=8"></script>
-<script src="poi.js?v=8"></script>
-<script src="walk.js?v=8"></script>
-<script src="play.js?v=8"></script>
-<script src="tokaido.js?v=8"></script>
-<script src="tabi.js?v=8"></script>
-<script src="app.js?v=8"></script>
-<script src="help.js?v=8"></script>
+<script src="config.js?v=9"></script>
+<script src="base.js?v=9"></script>
+<script src="road.js?v=9"></script>
+<script src="poi.js?v=9"></script>
+<script src="walk.js?v=9"></script>
+<script src="play.js?v=9"></script>
+<script src="tokaido.js?v=9"></script>
+<script src="tabi.js?v=9"></script>
+<script src="app.js?v=9"></script>
+<script src="ui.js?v=9"></script>
+<script src="help.js?v=9"></script>
 </body>
 </html>

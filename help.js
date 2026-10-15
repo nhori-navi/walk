@@ -1,4 +1,4 @@
-// MichiMiru の使い方（版8）：はじめての紹介・使い方ナビ（レクチャー）・ヘルプ（「？ 使い方」と各欄の「？」）
+// MichiMiru の使い方（版8、版9で下のタブに合わせて直した）：はじめての紹介・使い方ナビ（レクチャー）・ヘルプ（「？ 使い方」と各欄の「？」）
 // app.js のあとに読む。ほかのファイルの変数（pos・dest・route・walk・pickMode・mapMode など）をそのまま使う
 // SoraMiru の help.js（v34）と同じ作り。進み具合は walk_help_v1 に覚える（端末ごと。書き出しには入れない）
 (function () {
@@ -43,7 +43,8 @@
   row.innerHTML = '<label><input type="checkbox" id="helpChk">使い方ナビ</label><button id="helpAll">？ 使い方</button>';
   const tip = document.createElement('div'); tip.id = 'tip';
   tip.innerHTML = '<div id="tipText"></div><button id="tipX" aria-label="閉じる">×</button>';
-  $('panel').prepend(tip); $('panel').prepend(row);
+  $('panel').prepend(tip);
+  if ($('helpSlot')) $('helpSlot').appendChild(row); else $('panel').prepend(row); // 版9：設定タブの「使い方」の中
   $('helpChk').checked = !!H.on;
   $('helpChk').onchange = () => { H.on = $('helpChk').checked; if (H.on && H.done.finish) { H.done = {}; } hSave(); tipKey = ''; closedKey = ''; helpTick(); };
 
@@ -53,30 +54,31 @@
   const SEC = [
     ['about', 'MichiMiru とは', `<p>自分の好みで道を選んで歩く、徒歩のナビです。最短の道だけでなく、まだ歩いていない道、坂の少ない道、遊歩道、神社・寺・公園への寄り道を選べます。</p>
 <p>歩いた道は記録に残り、踏破マス・スタンプ帳・バーチャル東海道・旅の地図で、歩いた分が少しずつ形になっていきます。</p>`],
-    ['screen', '画面の見方', `<ul><li>上は地図、下はパネルです（パソコンでは地図の右にパネル）。パネルの上から、残りの距離、条件、ボタン、設定の順に並んでいます。</li>
+    ['screen', '画面の見方', `<ul><li>上は地図、下はタブの中身です（パソコンでは地図の右）。いちばん下のタブで切り替えます：<b>🧭ルート</b>（目的地・周回・道の好み）、<b>🟧あそぶ</b>（踏破マス・東海道・スタンプ帳）、<b>🗾記録</b>（今日・旅の地図・記録の保存・お気に入り）、<b>⚙️設定</b>（地図に出すもの・使い方など）。真ん中の丸い<b>🚶</b>で歩き始めます。</li>
+<li>地図の右の丸いボタン：<b>◎</b>＝現在地に追従（青いときは追従中。地図を動かすと切れます）、<b>N</b>／<b>⬆</b>＝地図の向き（北が上／進む方向が上）。</li>
 <li>地図の線：${line('#1f6fd1')} 青＝これから歩くルート（白い矢印が進む向き）、${line('#2ecc71')} 緑＝歩いた道、灰色の点線＝比較用の Mapbox の最短ルート（設定で入にしたとき）。</li>
 <li>青い点が現在地です。まわりの円は位置のずれの目安で、灰色の円と点は「ずれが大きい」しるしです。</li>
-<li>右下の「◎ 現在地に戻る」は、地図を動かして追従が切れたときに出ます。</li></ul>`],
+</ul>`],
     ['dest', '目的地・経由地・出発地', `<ul><li><b>目的地</b>：駅名・施設名・住所で検索するか、「地図で指定」を押して地図をタップします。歩いて行ける範囲（直線で5km）までです。</li>
 <li><b>経由地を追加</b>：通りたい場所を5か所までタップした順に通ります。「1つ戻す」「全部消す」で直せます。</li>
 <li><b>出発地を地図で選ぶ</b>：現在地が取れないときや、別の場所から計画したいときに使います。「現在地から出発に戻す」で戻ります。</li>
 <li><b>★登録</b>：目的地をお気に入りにします。次からはボタン1つで目的地にできます。</li></ul>`],
     ['route', '道選びの条件', `<ul><li><b>延長</b>：わざと遠回りして、指定の距離だけ長く歩きます。</li>
 <li><b>未踏破を優先</b>：まだ歩いていない道を選びやすくします（なし・弱・強・最強）。</li>
-<li><b>坂</b>：「なるべく避ける」は坂と階段を避け、「あえて選ぶ」は上り坂を選びます。上り下りの高さはパネルのグラフに出ます。</li>
+<li><b>坂</b>：「なるべく避ける」は坂と階段を避け、「あえて選ぶ」は上り坂を選びます。上り下りの高さはルートのカードのグラフに出ます。</li>
 <li><b>寄り道</b>：名前のある神社・寺・公園に1〜3か所寄るルートにします。寄り道できる遠回りの上限は「延長」の距離です。</li>
 <li><b>遊歩道を優先</b>：車道より、歩行者用の道や緑道を選びやすくします。</li>
-<li>条件を変えると、その場でルートを計算し直します。</li></ul>`],
+<li>選んでいるものが緑になります。「道の好み」を閉じても、今の選択が見出しの横に1行で出ます。条件を変えると、その場でルートを計算し直します。</li></ul>`],
     ['loop', '周回コースと別の案', `<ul><li><b>周回コースを作る</b>：今いる場所（または地図で選んだ出発地）から出て戻ってくる、指定した距離（1〜5km）のコースを作ります。矢印の向きに歩いてください。</li>
 <li>経由地を加えると、その場所を通る周回になります。</li>
 <li><b>別の案</b>：候補がいくつかあるときに押せます。押すたびに次の案に替わります。</li>
 <li><b>ルートを消す</b>：目的地・経由地・出発地もまとめて消します。</li></ul>`],
-    ['walk', '歩く（記録・案内・画面ON・ロック）', `<ul><li><b>歩き始める</b>（ルートがないときは「記録だけ始める」）を押すと、記録が始まり、地図が大きくなります。</li>
+    ['walk', '歩く（記録・案内・画面ON・ロック）', `<ul><li>真ん中の丸い<b>🚶</b>（ルートがあるときは「歩き始める」、ないときは「記録だけ」）か、ルートのカードの<b>歩き始める</b>を押すと、記録が始まり、地図が大きくなります。</li>
 <li>左上に、次の曲がり角などの案内（150m・20m手前）、残りの距離、到着の時刻、速さ、カロリーが出ます。曲がり角の40m手前で振動します（Android だけ。設定で入・切）。</li>
-<li>下の帯：<b>▲メニュー</b>＝パネルを出す、<b>画面ON</b>＝画面を消さない（記録を始めると入になります）、<b>🔒ロック</b>＝ポケットでの誤操作を防ぐ（バッジの長押しで解除）、<b>終了</b>＝記録を終える。</li>
+<li>下の帯：<b>▲メニュー</b>＝タブの中身を出す、<b>画面ON</b>＝画面を消さない（記録を始めると入になります）、<b>🔒ロック</b>＝ポケットでの誤操作を防ぐ（バッジの長押しで解除）、<b>終了</b>＝記録を終える。</li>
 <li>途中でページを閉じても、30分以内に開き直せば続きから再開します。</li>
 <li>歩きながら画面を見続けるのは危ないので、立ち止まってから操作してください。</li></ul>`],
-    ['today', '今日の合計とカロリー', `<ul><li>パネルの「今日：」に、0時からの距離・時間・カロリーが出ます。日付をまたいだ記録は、始めた日に入ります。乗り物の区間は入れません。</li>
+    ['today', '今日の合計とカロリー', `<ul><li>記録タブの「今日」に、0時からの距離・時間・カロリーが出ます。日付をまたいだ記録は、始めた日に入ります。乗り物の区間は入れません。</li>
 <li>カロリーは、歩く速さと時間、上った高さ、体重（設定）からの目安です。</li>
 <li>道から30m以上外れた記録（GPS のずれなど）は、距離や合計に入れません。設定で、灰色の点線として表示もできます。</li></ul>`],
     ['play', 'あそぶ（踏破マス・完全制覇・スタンプ・東海道）', `<ul><li><b>踏破マス</b>：約125m四方のマス（国の地域メッシュ）を、歩いて通ると数えます。「地図に踏破マスを表示」で塗られたマスが見えます。</li>
@@ -86,21 +88,21 @@
     ['tabi', '旅の地図', `<ul><li>徒歩・電車・車の記録で、全国1,741の市区町村を塗ります。歩いた所は濃い色、乗り物で通っただけの所は薄い色です。</li>
 <li>線の色：${line('#27ae60')} 徒歩、${line('#8e44ad')} 電車、${line('#e67e22')} 車。点線は、記録が途切れて直線でつないだ区間です（線の上の市区町村は数えません）。</li>
 <li>電車か車かは、線路に沿っているかで自動で決めます。違っていたら線をタップして「電車にする／車にする」で直せます。</li>
-<li>電車や車の記録は、OpenTracks の GPX を「歩いた記録の管理」から読み込みます（このアプリは歩く速さを超えた点を記録しません）。</li>
+<li>電車や車の記録は、OpenTracks の GPX を記録タブの「記録を読み込む」から読み込みます（このアプリは歩く速さを超えた点を記録しません）。</li>
 <li>下の帯の ⓘ で、都道府県ごとの数と手段ごとの距離が出ます。✕ で戻ります。</li></ul>`],
     ['rec', '記録の保存（書き出し・読み込み・GPX）', `<ul><li>記録はこの端末のこのブラウザの中にあります。パソコンとスマホでは別々です。ブラウザの「サイトデータを削除」で消えます。</li>
 <li><b>全部まとめて書き出す</b>：歩いた記録・スタンプ帳・完全制覇・お気に入り・体重・設定・東海道を1つのファイルにします。機種変更の前や、ときどきの控えに使ってください。ファイルには歩いた日時と道がすべて入っているので、人に渡さないでください。</li>
 <li><b>記録を読み込む</b>：書き出したファイルは、中身を確かめてから今の記録に足し合わせます（今の記録は消えません）。OpenTracks の GPX も読み込めます。歩きと乗り物は速さで分けます。</li>
 <li>iPhone の Safari は、7日使わないとサイトの記録を消すことがあります。</li></ul>`],
-    ['loc', '現在地と精度、パソコンで使うとき', `<ul><li>パネルの「現在地：精度 約○m」が、位置のずれの目安です。100mより大きいときは「ずれが大きい」として、ルートの出発地や到着の判定に使いません。「出発地を地図で選ぶ」で選び直すか、精度がよくなるのを待ってください。</li>
+    ['loc', '現在地と精度、パソコンで使うとき', `<ul><li>ルートタブのいちばん下の「現在地：精度 約○m」が、位置のずれの目安です。100mより大きいときは「ずれが大きい」として、ルートの出発地や到着の判定に使いません。「出発地を地図で選ぶ」で選び直すか、精度がよくなるのを待ってください。</li>
 <li>歩いた記録には、精度50m以内の位置だけを使います。</li>
 <li>パソコンでは、地図・ルートの計算・記録の表示・あそぶ・旅の地図・書き出しが使えます。歩いた記録、向き（進行方向）、振動、ロックはスマホで使ってください。</li>
-<li>位置情報は、ルートを作るためと歩いた記録のためだけに使います。運営者には何も送りません（詳しくは設定の下の「この端末の外へ送る情報」）。</li></ul>`],
+<li>位置情報は、ルートを作るためと歩いた記録のためだけに使います。運営者には何も送りません（詳しくは設定タブの「この端末の外へ送る情報」）。</li></ul>`],
     ['trouble', 'うまくいかないとき', `<ul><li><b>「道のデータを取得できませんでした」</b>：OpenStreetMap の公開サーバーが混んでいます。少し待って「再計算」を押してください。一度取った場所は端末に30日保存するので、次からは速くなります。</li>
 <li><b>ルートが出ない</b>：目的地が遠すぎる（直線5km超）か、近くに歩ける道がない場所です。降りる駅を目的地にするか、場所を少しずらしてください。</li>
 <li><b>記録が残らない</b>：位置のずれが大きい（屋内・パソコン）と記録しません。画面を消すと記録が途切れることがあるので、長く歩くときは OpenTracks で記録して GPX を読み込むのが確実です。</li>
-<li><b>道が実際と違う</b>：OpenStreetMap を書き足したあとは、設定の「道のデータを取り直す」を押してください。</li>
-<li>パネルの下の赤い文字に、エラーの理由が出ます。</li></ul>
+<li><b>道が実際と違う</b>：OpenStreetMap を書き足したあとは、設定タブの「道のデータを取り直す」を押してください。</li>
+<li>タブの中身のいちばん上の赤い文字に、エラーの理由が出ます。</li></ul>
 <p class="small">地図：Mapbox／道路・名称検索・旧東海道の道筋：© OpenStreetMap contributors／標高・住所検索：国土地理院／東海道の宿場間の距離：川口市の資料／市区町村の境目：国土数値情報（行政区域）国土交通省を加工／線路：地球地図日本（国土地理院）を加工</p>`]];
   const box = document.createElement('div'); box.id = 'helpBox';
   box.innerHTML = '<button id="helpClose">閉じる</button> <b>MichiMiru の使い方</b>' +
@@ -135,15 +137,17 @@
     if (place === 'in') el.appendChild(b); else el.after(b);
   };
   qb('pickBtn', 'dest');
-  qb('foot', 'route');
+  qb($('prefs').querySelector('summary'), 'route', 'in');
   qb('loopBtn', 'loop');
   qb('walkBtn', 'walk');
   qb($('today').parentNode, 'today', 'in');
   qb($('loc').parentNode, 'loc', 'in');
   qb($('playSum').parentNode, 'play', 'in');
-  qb($('tabiBtn').closest('details').querySelector('summary'), 'tabi', 'in');
-  qb($('recExport').closest('details').querySelector('summary'), 'rec', 'in');
-  qb($('netReset').closest('details').querySelector('summary'), 'trouble', 'in');
+  qb('tkHead', 'play', 'in');
+  qb('tabiHead', 'tabi', 'in');
+  qb('recHead', 'rec', 'in');
+  qb('viewHead', 'screen', 'in');
+  qb('setHead', 'trouble', 'in');
   // 東海道・旅の地図の帯：いま開いている地図の説明
   const mq = document.createElement('button'); mq.className = 'qb'; mq.textContent = '？'; mq.title = '説明';
   mq.style.margin = '0';
@@ -178,7 +182,6 @@
   ['ext', 'unexp', 'slope', 'foot', 'poiShrine', 'poiTemple', 'poiPark'].forEach(id => $(id).addEventListener('change', () => { if (route || dest) mark('cond'); }));
   $('endBtn').addEventListener('click', () => mark('walk'));
   $('routeClear').addEventListener('click', () => mark('clear'));
-  $('recExport').closest('details').addEventListener('toggle', e => { if (e.target.open) mark('rec'); });
   // 初めて歩き始めたときだけ、左上に下の帯の説明を出す（歩きながら読ませないよう1回だけ）
   $('walkBtn').addEventListener('click', () => {
     if (!walk || H.ev.walkNote || !H.on) return;
@@ -194,16 +197,17 @@
   // 手順（上から順に、まだ終わっていない最初のものを出す）。t：文、el：光らせる場所、ok：終わった印を付ける条件、on：出してよい条件
   const STEPS = [
     {id:'dest', t:'まず<b>目的地</b>を決めましょう。駅名や施設名で<b>検索</b>するか、<b>「地図で指定」</b>を押して地図をタップします。', el:() => $('search'), ok:() => !!dest, on:() => true},
-    {id:'cond', t:'ルートが出ました。<b>「未踏破を優先」</b>や<b>「坂」</b>などの条件を変えると、その場で道が選び直されます。1つ変えてみましょう。', el:() => $('unexp'), ok:() => H.done.cond, on:() => !!route},
+    {id:'cond', t:'ルートが出ました。<b>「道の好み」</b>の<b>「未踏破を優先」</b>や<b>「坂」</b>を押して変えると、その場で道が選び直されます。1つ変えてみましょう。', el:() => inFold(chipOf('unexp')), ok:() => H.done.cond, on:() => !!route},
     {id:'loop', t:'目的地がなくても歩けます。<b>「周回コースを作る」</b>で、ここから出て戻ってくるコースを作ってみましょう。', el:() => $('loopBtn'), ok:() => !!(route && route.loop), on:() => true},
-    {id:'walk', t:'<b>「歩き始める」</b>を押すと記録が始まり、曲がり角の案内が出ます。歩き終わったら下の帯の<b>「終了」</b>を押します。', el:() => $('walkBtn'), ok:() => H.done.walk, on:() => !noSensor()},
-    {id:'mesh', t:'<b>「あそぶ」</b>を開いて、<b>「地図に踏破マスを表示」</b>にしてみましょう。歩いたマスが塗られ、マスをタップすると残りの道が分かります。', el:() => inFold($('meshChk')), ok:() => $('meshChk').checked, on:() => true},
-    {id:'tk', t:'<b>バーチャル東海道</b>の<b>「地図で見る」</b>で、歩いた距離で進んだ旧東海道の今の位置が見られます。', el:() => inFold($('tkMapBtn')), ok:() => H.done.tk, on:() => true},
-    {id:'tabi', t:'<b>「旅の地図」</b>の<b>「旅の地図を見る」</b>で、行った市区町村が全国の地図に塗られます。', el:() => inFold($('tabiBtn')), ok:() => H.done.tabi, on:() => true},
-    {id:'rec', t:'記録はこの端末の中だけにあります。<b>「歩いた記録の管理」</b>を開いて、<b>「全部まとめて書き出す」</b>の場所を確かめておきましょう。', el:() => inFold($('recExport')), ok:() => H.done.rec, on:() => true},
+    {id:'walk', t:'<b>「歩き始める」</b>（真ん中の丸い🚶でも）を押すと記録が始まり、曲がり角の案内が出ます。歩き終わったら下の帯の<b>「終了」</b>を押します。', el:() => vis($('walkBtn')) ? $('walkBtn') : $('walkFab'), ok:() => H.done.walk, on:() => !noSensor()},
+    {id:'mesh', t:'下の<b>「あそぶ」</b>タブで、<b>「地図に踏破マスを表示」</b>にしてみましょう。歩いたマスが塗られ、マスをタップすると残りの道が分かります。', el:() => inFold($('meshChk')), ok:() => $('meshChk').checked, on:() => true},
+    {id:'tk', t:'<b>「あそぶ」</b>タブのバーチャル東海道の<b>「地図で見る」</b>で、歩いた距離で進んだ旧東海道の今の位置が見られます。', el:() => inFold($('tkMapBtn')), ok:() => H.done.tk, on:() => true},
+    {id:'tabi', t:'<b>「記録」</b>タブの<b>「旅の地図を見る」</b>で、行った市区町村が全国の地図に塗られます。', el:() => inFold($('tabiBtn')), ok:() => H.done.tabi, on:() => true},
+    {id:'rec', t:'記録はこの端末の中だけにあります。<b>「記録」</b>タブの<b>「全部まとめて書き出す」</b>で、ときどき控えを取りましょう（ここに数秒表示すると次へ進みます）。', el:() => $('recExport'), ok:() => H.done.rec, on:() => true},
     {id:'clear', t:'最後に<b>「ルートを消す」</b>で、地図をすっきりさせられます。', el:() => $('routeClear'), ok:() => H.done.clear, on:() => !!(route || dest)}];
   let tipKey = '', closedKey = '', hlEl = null, finishAt = 0;
   function setTip(key, html, el) {
+    if (el && window.uiReach) el = uiReach(el);
     if (hlEl && hlEl !== el) { hlEl.classList.remove('hl'); hlEl = null; }
     if (!key || key === closedKey) { tip.style.display = 'none'; tipKey = key || ''; return; }
     if (key !== tipKey) { $('tipText').innerHTML = html; tipKey = key; if (el && vis(el) && el.closest && el.closest('#panel')) el.scrollIntoView({block: 'nearest'}); }
@@ -242,13 +246,17 @@
       if (s.ok()) { H.done[s.id] = 1; hSave(); continue; }
       if (s.on()) { step = s; break; }
     }
-    if (step) return setTip('s:' + step.id, step.t, step.el());
+    if (step) {
+      // 記録の管理：「全部まとめて書き出す」が5秒見えたら済み
+      if (step.id === 'rec' && vis($('recExport'))) { if (!H.ev.recAt) H.ev.recAt = Date.now(); if (Date.now() - H.ev.recAt > 5000) mark('rec'); } else if (step.id === 'rec') H.ev.recAt = 0;
+      return setTip('s:' + step.id, step.t, step.el());
+    }
     // 全部終わった（パソコンでは「歩き始める」がなくても完了）
     const must = s => !(noSensor() && s.id === 'walk');
     if (!H.done.finish && STEPS.every(s => H.done[s.id] || !must(s))) {
       if (!finishAt) finishAt = Date.now();
       if (Date.now() - finishAt > 10000) { H.done.finish = 1; H.on = false; $('helpChk').checked = false; hSave(); return setTip('', ''); }
-      return setTip('finish', '<b>レクチャー完了！</b> いつでも「？ 使い方」で説明を見られます。使い方ナビはまもなく自動で OFF になります。', $('helpAll'));
+      return setTip('finish', '<b>レクチャー完了！</b> いつでも「設定」タブの「？ 使い方」で説明を見られます。使い方ナビはまもなく自動で OFF になります。', $('helpAll'));
     }
     setTip('', '');
   }
