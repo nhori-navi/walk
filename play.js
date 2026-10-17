@@ -152,11 +152,31 @@ function showMeshRem() {
   const k = meshSel || (walk && pos && !isRough() ? meshKey(pos) : null), m = k && meshInfo.get(k);
   setData('meshRem', m && !meshDone[k] ? m.rem.map(l => line(l)[0]) : []);
 }
+// 版10：吹き出しは半透明。ほかの場所をタップすると消える（app.js）。消えている状態でマスをタップすると、またそのマスの説明を出す
+// 道のデータがないマスには「この辺りの道のデータを読み込む」を付ける
 function showMeshAt(p) {
   const k = meshKey(p); meshSel = k; showMeshRem();
   if (meshPopup) meshPopup.remove();
-  meshPopup = new mapboxgl.Popup({closeButton: true}).setLngLat(p).setHTML(meshText(k)).addTo(map);
-  if (meshPopup.on) meshPopup.on('close', () => { if (meshSel === k) { meshSel = null; showMeshRem(); } });
+  const noData = !meshInfo.get(k) && !meshDone[k];
+  const html = noData ? (graph ? 'このマスの道のデータはまだありません（数える道がない場所のこともあります）' : '道のデータを読み込むと、このマスの残りが分かります') +
+    '<br><button class="meshLoad">この辺りの道のデータを読み込む</button>' : meshText(k);
+  meshPopup = new mapboxgl.Popup({closeButton: false, closeOnClick: false, className: 'meshPop', maxWidth: '260px'}).setLngLat(p).setHTML(html).addTo(map);
+  const b = document.querySelector('.meshPop .meshLoad');
+  if (b) b.onclick = e => { e.stopPropagation(); meshLoad(p); };
+}
+const meshPopOpen = () => !!meshPopup;
+function closeMeshPop() {
+  if (meshPopup) meshPopup.remove();
+  meshPopup = null; meshSel = null; showMeshRem();
+}
+// タップしたマスのまわり（約2km四方）の道のデータを読み込んで、すぐ残りを出す（現在地に関係なく使える）
+async function meshLoad(p) {
+  closeMeshPop();
+  if (busy) { status('いま計算中です。終わってからもう一度押してください'); return; }
+  busy = true;
+  try { await ensureGraph(bboxOf([p], 300), bboxOf([p], 1000)); status('この辺りの道のデータを読み込みました'); showMeshAt(p); }
+  catch (e) { showErr(jaErr(e)); }
+  finally { busy = false; if (pending) { pending = false; calc(); } }
 }
 // あと少しのマス（残り200m以下、近い順に5つ）
 function drawNearList() {

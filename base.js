@@ -192,6 +192,7 @@ const cacheGet = id => idbDo('readonly', st => st.get(id));
 const cachePut = (id, v) => idbDo('readwrite', st => st.put(v, id));
 const cacheDel = id => idbDo('readwrite', st => st.delete(id));
 const cacheClear = () => idbDo('readwrite', st => st.clear());
+const cacheKeys = () => idbDo('readonly', st => st.getAllKeys());
 function saveMeta() { lsSet('walk_area_meta', JSON.stringify(areaMeta)); }
 
 // ---------- 標高（国土地理院の標高タイル） ----------

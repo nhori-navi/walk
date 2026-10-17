@@ -317,9 +317,15 @@ function todayStats() {
   });
   return {dist, sec, kcal};
 }
+// 版10：今日初めて歩いた道（未踏破）の長さ。道のデータを読み込んだ範囲だけ
+function todayNew() {
+  if (!graph) return 0;
+  let m = 0; graph.edges.forEach(e => { if (e.k && !e.k0) m += e.w; });
+  return m;
+}
 function updToday() {
-  const s = todayStats();
-  $('today').textContent = s.dist >= 1 ? `今日：${fmtDist(s.dist)}・${fmtTime(s.sec)}・${Math.round(s.kcal)}kcal` : '今日：まだ歩いた記録がありません';
+  const s = todayStats(), nu = todayNew();
+  $('today').textContent = s.dist >= 1 ? `今日：${fmtDist(s.dist)}・${fmtTime(s.sec)}・${Math.round(s.kcal)}kcal` + (graph ? `・未踏破 ${fmtDist(nu)}` : '') : '今日：まだ歩いた記録がありません';
 }
 function afterTracksChanged() {
   if (graph) markWalked(graph);

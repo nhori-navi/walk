@@ -26,15 +26,12 @@ function ensurePois(g, quiet) {
   if (!g.poiP) g.poiP = loadPois(g, quiet).catch(e => { g.poiP = null; throw e; }); // 同時に呼ばれても取得は1回だけ
   return g.poiP;
 }
+// 版10：道と同じ問い合わせで受け取った神社・寺・公園を、マスごとの保存から取り出す
 async function loadPois(g, quiet) {
-  let els = null;
-  if (g.areaId) { try { els = await cacheGet('p' + g.areaId); } catch (e) {} }
-  if (!els) {
-    if (!quiet) { status('神社・寺・公園のデータを取得中…'); await pause(); }
-    const box = bboxStr(g.bb);
-    els = await overpass(`[out:json][timeout:60];(nwr["amenity"="place_of_worship"]["religion"~"^(shinto|buddhist)$"](${box});nwr["leisure"~"^(park|garden)$"](${box}););out tags center;`);
-    if (g.areaId) { try { await cachePut('p' + g.areaId, els); } catch (e) {} }
-  }
+  const isPoi = e => e.tags && (e.tags.amenity === 'place_of_worship' || e.tags.leisure) && (e.type === 'node' || e.center);
+  const parts = await Promise.all((g.tiles || []).map(k => getTile(k).then(els => els.filter(isPoi))));
+  const seen = new Set(), els = [];
+  parts.forEach(l => l.forEach(e => { const id = e.type + e.id; if (!seen.has(id)) { seen.add(id); els.push(e); } }));
   const out = [];
   for (const e of els) {
     const t = e.tags || {}, c = e.type === 'node' ? [e.lon, e.lat] : e.center ? [e.center.lon, e.center.lat] : null;

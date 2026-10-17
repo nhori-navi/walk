@@ -88,6 +88,7 @@ map.on('click', e => {
   else if (pickMode === 'dest') { pickMode = null; destName = ''; setDest(p); }
   else if (pickMode === 'via') { pickMode = null; addVia(p); }
   else if (mapMode === 'tabi') tabiTap(e);
+  else if (meshPopOpen()) closeMeshPop(); // 版10：マスの吹き出しが出ているときは、ほかをタップすると消すだけ
   else if (!mapMode && $('meshChk').checked) {
     // 踏破マスを表示しているときは、タップしたマスの残りを出す（神社・寺・公園の印をタップしたときは除く）
     let onPoi = false;
@@ -411,10 +412,18 @@ $('netChk').onchange = () => {
   if ($('netChk').checked && !graph) status('ルートを一度計算すると、その範囲の道が表示されます。');
   drawNet();
 };
-$('netReset').onclick = async () => {
-  graph = null; areaMeta = []; saveMeta();
-  try { await cacheClear(); } catch (e) {}
-  drawNet();
+// 版10：取り直す前に確かめる（道と神社・寺・公園のデータだけを消す。標高・旅の地図・東海道のデータは残す）
+$('netReset').onclick = () => {
+  const n = Object.keys(tileMeta).length;
+  $('netAskText').textContent = `端末に保存している道のデータ（${n}マス）と神社・寺・公園のデータを消して、次の計算で取り直します。混んでいると時間がかかります。よろしいですか？`;
+  $('netAsk').style.display = 'block';
+};
+$('netNo').onclick = () => { $('netAsk').style.display = 'none'; };
+$('netYes').onclick = async () => {
+  $('netAsk').style.display = 'none';
+  graph = null; tileMeta = {}; saveTileMeta(); tileMem.clear();
+  try { (await cacheKeys()).filter(k => /^(t2:|tp:|a\d|pa\d)/.test(String(k))).forEach(k => cacheDel(k).catch(() => {})); } catch (e) {}
+  drawNet(); drawTracks();
   status('保存していた道のデータを消しました。次の計算で取り直します。');
   if (route) calc();
 };
@@ -456,15 +465,20 @@ function clearRoute() {
   cmpCoords = null; cmpText = ''; setData('route', []); setData('cmp', []); $('sub').innerHTML = '';
   drawProf(); drawStops();
 }
+// 版10：計算の状態（ルートが出ないとき、ui.js がルートのカードに理由を出す）。k：idle／calc／wait／fail／ok
+let calcState = {k: 'idle', msg: ''};
 async function calc(m) {
   if (m) mode = m;
   if (busy) { pending = true; return; }
   if (mode === 'to' && !dest) return;
-  if (!(mode === 'loop' && loopStart) && !originOrWarn()) return;
+  if (!(mode === 'loop' && loopStart) && !originOrWarn()) { calcState = {k: 'wait', msg: $('warnText').textContent}; return; }
   hideWarn(); waitCalc = false;
-  busy = true;
-  try { if (mode === 'loop') await calcLoop(); else await calcTo(); }
-  catch (e) { showErr(jaErr(e)); status(''); }
+  busy = true; calcState = {k: 'calc', msg: ''};
+  try {
+    if (mode === 'loop') await calcLoop(); else await calcTo();
+    calcState = route ? {k: 'ok', msg: ''} : {k: 'fail', msg: $('sub').textContent || 'ルートが見つかりませんでした'};
+  }
+  catch (e) { showErr(jaErr(e)); status(''); calcState = {k: 'fail', msg: jaErr(e)}; }
   finally {
     busy = false;
     if (pending) { pending = false; calc(); }
@@ -634,15 +648,32 @@ function updateRemain() {
   route.rough = !!(track && isRough()); // 位置が粗い間は、到着の判定・外れの注意・案内を出さない
   route.off = 0;
   if (track) {
-    let best = {d: 1e12, i: 0, t: 0};
-    for (let i = Math.max(0, route.prog - 2); i < c.length - 1; i++) {
-      const s = segDist(pos, c[i], c[i + 1]);
-      if (s.d < best.d) best = {d: s.d, i, t: s.t};
+    // 版10：今いる位置は「直前に進んだところの少し後ろから250m先まで」で探す（行きと帰りが重なる周回で、帰り道を拾わないように）。
+    // その範囲で60m以内に見つからなければ、先のほうを探して40m以内なら近道したとみなす。どちらもなければルートを外れている
+    const a0 = route.a || route.cum[route.prog || 0] || 0, cum = route.cum;
+    const find = (lo, hi) => {
+      let best = {d: 1e12, i: -1, t: 0};
+      for (let i = 0; i < c.length - 1; i++) {
+        if (cum[i + 1] < lo || cum[i] > hi) continue;
+        const s = segDist(pos, c[i], c[i + 1]);
+        if (s.d < best.d) best = {d: s.d, i, t: s.t};
+      }
+      return best;
+    };
+    let use = null;
+    const near = find(a0 - 30, a0 + 250);
+    if (near.i >= 0 && near.d <= 60) use = near;
+    else {
+      const far = find(a0 - 30, Infinity);
+      if (far.i >= 0 && far.d <= 40) use = far;
+      route.off = Math.min(near.d, far.d);
     }
-    route.off = best.d;
-    if (best.d <= 60) route.prog = Math.max(route.prog, best.i);
-    a = route.cum[best.i] + best.t * (route.cum[best.i + 1] - route.cum[best.i]);
+    if (use) {
+      route.off = use.d; route.prog = use.i;
+      a = cum[use.i] + use.t * (cum[use.i + 1] - cum[use.i]);
+    } else a = a0;
     remain = Math.max(0, total - a);
+    if (route.loop && a < total * 0.7) remain = Math.max(remain, 20); // 周回は7割を過ぎるまで「戻りました」にしない
   }
   lastRemain = remain; route.a = a;
   route.remUp = route.prof ? upFrom(route.prof, a) : 0;

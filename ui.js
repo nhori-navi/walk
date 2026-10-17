@@ -67,6 +67,16 @@ body:not(.has-plan) #routeClear{display:none}
 #reBtn{display:none!important}
 body.mode-tk #mapBtns,body.mode-tabi #mapBtns{display:none}
 #status:empty,#err:empty{display:none}
+/* 版10：ルートが出ないときの理由、確認の枠、マスの吹き出し（半透明） */
+#routeWhy{display:none;background:#fff8e1;border:1px solid #f0c419;border-radius:10px;padding:6px 9px;margin:6px 0 2px;font-size:14px;line-height:1.5}
+#routeWhy.on{display:block}
+#routeWhy.flash{animation:whyf 1s ease-in-out 2}
+@keyframes whyf{50%{background:#ffe082}}
+.ask{display:none;background:#fdecea;border:1px solid #e6b0aa;border-radius:10px;padding:6px 9px;margin:6px 0;font-size:14px}
+.meshPop .mapboxgl-popup-content{background:rgba(255,255,255,.78);padding:6px 9px;font-size:13px;line-height:1.5;box-shadow:0 1px 4px rgba(0,0,0,.25)}
+.meshPop.mapboxgl-popup-anchor-bottom .mapboxgl-popup-tip{border-top-color:rgba(255,255,255,.78)}
+.meshPop.mapboxgl-popup-anchor-top .mapboxgl-popup-tip{border-bottom-color:rgba(255,255,255,.78)}
+.meshPop .meshLoad{margin:4px 0 0;padding:4px 10px;min-height:32px;border-radius:8px;border:1px solid #1e7e34;background:#1e7e34;color:#fff;font-size:13px}
 #status{margin:0 0 6px}
 `;
   document.head.appendChild(st);
@@ -89,7 +99,16 @@ body.mode-tk #mapBtns,body.mode-tabi #mapBtns{display:none}
   window.showTab = showTab;
   window.curTab = () => cur;
   bar.querySelectorAll('.tb').forEach(b => b.onclick = () => { showTab(b.dataset.tab); if (walk && !document.body.classList.contains('menu')) $('menuBtn').click(); });
-  $('walkFab').onclick = () => $('walkBtn').click();
+  // 版10：目的地を決めたのにルートがまだないときは「計算待ち」。押すとルートのタブの理由のところを光らせる
+  const waitingRoute = () => !route && !walk && ((mode === 'to' && !!dest) || (mode === 'loop' && calcState.k !== 'idle' && calcState.k !== 'ok'));
+  $('walkFab').onclick = () => {
+    if (waitingRoute()) {
+      showTab('route'); const w = $('routeWhy');
+      w.classList.remove('flash'); void w.offsetWidth; w.classList.add('flash'); w.scrollIntoView({block: 'nearest'});
+      return;
+    }
+    $('walkBtn').click();
+  };
   showTab(cur);
   // 使い方ナビ：見えていないタブの中の部品なら、そのタブのボタンを光らせる
   window.uiReach = el => {
@@ -139,13 +158,38 @@ body.mode-tk #mapBtns,body.mode-tabi #mapBtns{display:none}
     return t.length ? '：' + t.join('・') : '：ふつう（最短）';
   }
 
+  // ---------- 版10：ルートが出ないときの理由とボタン ----------
+  let whyKey = '';
+  function showWhy(on) {
+    const w = $('routeWhy');
+    w.classList.toggle('on', on);
+    if (!on) { whyKey = ''; return; }
+    if (mode === 'to' && dest) $('rem').textContent = '目的地：' + (destName || '地図で選んだ場所');
+    const k = calcState.k, key = k + '|' + calcState.msg + '|' + !!pos;
+    if (key === whyKey) return;
+    whyKey = key;
+    if (k === 'calc' || k === 'idle') { w.innerHTML = '⏳ ルートを計算中です…'; return; }
+    if (k === 'wait') {
+      w.innerHTML = '📍 ルートはまだ出ていません。' + esc(calcState.msg) +
+        '<div class="acts"><button id="whyPick">出発地を地図で選ぶ</button>' + (pos ? '<button id="whyForce">それでもこの位置で計算</button>' : '') + '</div>';
+      $('whyPick').onclick = () => $('warnPick').click();
+      if ($('whyForce')) $('whyForce').onclick = () => $('warnForce').click();
+      return;
+    }
+    w.innerHTML = '⚠️ ルートを作れませんでした：' + esc(calcState.msg) +
+      '<div class="acts"><button id="whyRetry" class="primary">もう一度計算する</button></div>';
+    $('whyRetry').onclick = () => { calcState = {k: 'calc', msg: ''}; calc(); };
+  }
+
   // ---------- 状態に合わせて見せ方を変える（0.4秒ごと） ----------
   let lastDest = dest, wasWalk = !!walk;
   function tick() {
     const b = document.body.classList;
     b.toggle('has-route', !!route);
     b.toggle('has-plan', !!(route || dest || vias.length || startPt));
-    $('walkFabTx').textContent = route ? '歩き始める' : '記録だけ';
+    const wr = waitingRoute();
+    $('walkFabTx').textContent = route ? '歩き始める' : wr ? (calcState.k === 'calc' ? '計算中…' : '計算待ち') : '記録だけ';
+    showWhy(wr);
     $('mFollow').classList.toggle('on', !!follow);
     $('mFollow').title = follow ? '現在地に追従しています（押すと止める）' : '現在地に戻る';
     $('mHead').textContent = headingUp ? '⬆' : 'N';

@@ -2,13 +2,58 @@
 
 // ---------- 道のデータ（OpenStreetMap） ----------
 const bboxStr = bb => [bb.s, bb.w, bb.n, bb.e].map(v => v.toFixed(5)).join(',');
-async function fetchOverpass(bb) {
-  try { return await overpass(`[out:json][timeout:90];way["highway"~"${HW}"](${bboxStr(bb)});out body;>;out skel qt;`); }
+// 版10：道のデータは約2km四方のマス（タイル）ごとに取る。1回の問い合わせを小さくして、混んでいるときも時間切れになりにくくする
+const TILE = 0.02, TILE_MAX = 150, GRAPH_TILES = 25; // マスの大きさ（度）・端末に保存する数・道の網に入れる数
+const tileKey = (x, y) => x + '_' + y;
+const tileBB = k => { const [x, y] = k.split('_').map(Number); return {w: x * TILE, s: y * TILE, e: (x + 1) * TILE, n: (y + 1) * TILE}; };
+function tileRange(bb) { return {x0: Math.floor(bb.w / TILE), x1: Math.floor(bb.e / TILE), y0: Math.floor(bb.s / TILE), y1: Math.floor(bb.n / TILE)}; }
+function tilesOfRange(r) { const o = []; for (let x = r.x0; x <= r.x1; x++) for (let y = r.y0; y <= r.y1; y++) o.push(tileKey(x, y)); return o; }
+let tileMeta = loadJSON('walk_tile_meta', '{}'); // {マス: [取得した時刻, 最後に使った時刻]}
+const saveTileMeta = () => lsSet('walk_tile_meta', JSON.stringify(tileMeta));
+// 問い合わせの順番待ち（同時に2つまで）。道も神社・寺・公園も同じ列に並ぶ
+const ovpQ = []; let ovpRun = 0;
+function ovpQueue(q, limit) {
+  return new Promise((res, rej) => { ovpQ.push({q, limit, res, rej}); ovpPump(); });
+}
+function ovpPump() {
+  while (ovpRun < 2 && ovpQ.length) {
+    const j = ovpQ.shift(); ovpRun++;
+    overpass(j.q, j.limit).then(j.res, j.rej).finally(() => { ovpRun--; ovpPump(); });
+  }
+}
+// 1マス1回の問い合わせで、神社・寺・公園（先に出す）と道をまとめて受け取る
+async function fetchTile(k) {
+  const box = bboxStr(tileBB(k));
+  try { return await ovpQueue(`[out:json][timeout:40];(nwr["amenity"="place_of_worship"]["religion"~"^(shinto|buddhist)$"](${box});nwr["leisure"~"^(park|garden)$"](${box}););out tags center;way["highway"~"${HW}"](${box});out body;>;out skel qt;`, OVP_LIMIT); }
   catch (e) { throw new Error('道の' + e.message); }
 }
+// マスのデータを用意する（覚えている分 → 端末の保存 → 取り寄せ）
+const tileMem = new Map();
+async function getTile(k, onNew) {
+  const now = Date.now(), life = CACHE_DAYS * 864e5, m = tileMeta[k];
+  if (tileMem.has(k) && m && now - m[0] < life) return tileMem.get(k);
+  if (m && now - m[0] < life) {
+    try { const els = await cacheGet('t2:' + k); if (els) { m[1] = now; tileMem.set(k, els); return els; } } catch (e) {}
+  }
+  const els = await fetchTile(k);
+  if (onNew) onNew();
+  tileMem.set(k, els);
+  try {
+    await cachePut('t2:' + k, els);
+    tileMeta[k] = [now, now];
+    // 古いもの・多すぎる分は消す
+    const keys = Object.keys(tileMeta).filter(x => x !== k && (now - tileMeta[x][0] >= life)).concat(
+      Object.keys(tileMeta).sort((a, b) => tileMeta[b][1] - tileMeta[a][1]).slice(TILE_MAX));
+    [...new Set(keys)].forEach(x => { delete tileMeta[x]; tileMem.delete(x); cacheDel('t2:' + x).catch(() => {}); cacheDel('tp:' + x).catch(() => {}); });
+    saveTileMeta();
+  } catch (e) { /* 保存できなくても計算は続ける */ }
+  return els;
+}
+// 版9までの「範囲ごと」の保存は使わないので消す
+if (areaMeta.length) { areaMeta.forEach(a => { cacheDel(a.id).catch(() => {}); cacheDel('p' + a.id).catch(() => {}); }); areaMeta = []; saveMeta(); }
 // サーバーに上から順に頼む。6秒返事がなければ次にも頼み（同時は2か所まで）、断られたら待たずに次へ。
 // 最初に返ってきた答えを使い、残りは止める（各25秒で打ち切り）
-const OVP_PAR = 2, OVP_WAIT = 6000, OVP_LIMIT = 25000;
+const OVP_PAR = 2, OVP_WAIT = 6000, OVP_LIMIT = 45000; // 版10：25秒→45秒
 function overpass(q, limit) {
   return new Promise((resolve, reject) => {
     const reasons = [], ctls = [];
@@ -46,35 +91,42 @@ function overpass(q, limit) {
     next();
   });
 }
-// 必要な範囲の道の網を用意する（保存済みがあればそれを使い、なければ取り寄せて保存）
-async function ensureGraph(need, fetchBB) {
+// 必要な範囲の道の網を用意する。fetchBB にかかるマスをそろえる（今の網のマスと合わせて長方形になり、25枚までなら一緒に入れる）
+// 取れないマスがあったら、20秒待って1回だけやり直す（retry=false なら、やり直さない）
+async function ensureGraph(need, fetchBB, retry = true) {
   if (graph && inside(need, graph.bb)) return;
-  const now = Date.now(), life = CACHE_DAYS * 864e5;
-  const hit = areaMeta.filter(a => inside(need, a.bb) && now - a.t < life).sort((a, b) => b.t - a.t)[0];
-  let els = null, bb = fetchBB, from = '', areaId = null;
-  if (hit) {
-    try {
-      status('保存済みの道のデータを読み込み中…'); await pause();
-      els = await cacheGet(hit.id);
-      if (els) { bb = hit.bb; areaId = hit.id; hit.used = now; saveMeta(); from = `保存済みデータ（${Math.floor((now - hit.t) / 864e5)}日前に取得）`; }
-    } catch (e) { els = null; }
+  let r = tileRange(fetchBB);
+  if (graph && graph.tr) {
+    const u = {x0: Math.min(r.x0, graph.tr.x0), x1: Math.max(r.x1, graph.tr.x1), y0: Math.min(r.y0, graph.tr.y0), y1: Math.max(r.y1, graph.tr.y1)};
+    if ((u.x1 - u.x0 + 1) * (u.y1 - u.y0 + 1) <= GRAPH_TILES) r = u;
   }
-  if (!els) {
-    status('道のデータを取得中…（数秒〜数十秒かかります）'); await pause();
-    els = await fetchOverpass(fetchBB); from = '新しく取得';
-    try {
-      const id = 'a' + now; areaId = id;
-      await cachePut(id, els);
-      areaMeta.push({id, bb: fetchBB, t: now, used: now});
-      const drop = areaMeta.filter(a => now - a.t >= life);
-      areaMeta = areaMeta.filter(a => now - a.t < life).sort((a, b) => b.used - a.used);
-      drop.push(...areaMeta.splice(CACHE_MAX));
-      saveMeta();
-      drop.forEach(a => { cacheDel(a.id).catch(() => {}); cacheDel('p' + a.id).catch(() => {}); });
-    } catch (e) { /* 保存できなくても計算は続ける */ }
+  const keys = tilesOfRange(r);
+  let fresh = 0, done = 0;
+  const show = () => status(`道のデータを準備中…（${done}／${keys.length}マス${fresh ? `、うち${fresh}マスを新しく取得` : ''}）`);
+  show(); await pause();
+  const got = new Map(), fail = [];
+  let lastErr = null;
+  const load = async ks => {
+    await Promise.all(ks.map(k => getTile(k, () => fresh++).then(els => { got.set(k, els); done++; show(); }, e => { fail.push(k); lastErr = e; })));
+  };
+  await load(keys);
+  if (fail.length && retry) {
+    const why = (jaErr(lastErr).match(/（([^（）]*)）$/) || [])[1];
+    status(`道のデータが${fail.length}マス取れませんでした${why ? `（${why}）` : ''}。20秒後にもう一度試します…`);
+    await new Promise(res => setTimeout(res, 20000));
+    const again = fail.splice(0); lastErr = null; await load(again);
   }
+  if (fail.length) throw lastErr || new Error('道のデータを取得できませんでした');
   status('道の網を組み立て中…'); await pause();
-  graph = buildGraph(els); graph.bb = bb; graph.from = from; graph.areaId = areaId;
+  // マスの境目をまたぐ道は両方のマスに入っているので、重なりを除いてつなぐ
+  const seen = new Set(), els = [];
+  keys.forEach(k => got.get(k).forEach(e => { const id = e.type + e.id; if (!seen.has(id)) { seen.add(id); els.push(e); } }));
+  const now = Date.now(), oldest = Math.min(...keys.map(k => (tileMeta[k] || [now])[0]));
+  graph = buildGraph(els);
+  graph.bb = {w: r.x0 * TILE, s: r.y0 * TILE, e: (r.x1 + 1) * TILE, n: (r.y1 + 1) * TILE};
+  graph.tr = r; graph.tiles = keys;
+  graph.from = fresh ? `${fresh}マスを新しく取得` : `保存済みデータ（${Math.floor((now - oldest) / 864e5)}日前に取得）`;
+  saveTileMeta();
   markWalked(graph);
   drawNet(); drawPois(); drawTracks();
   ensurePois(graph, true).then(() => updStamps()).catch(() => {}); // スタンプ帳のために神社・寺・公園も用意（失敗しても続ける）
@@ -87,7 +139,7 @@ async function prefetch() {
   busy = true;
   try {
     const c = round500(o);
-    await ensureGraph(bboxOf([c], 1500), bboxOf([c], 2000));
+    await ensureGraph(bboxOf([c], 1500), bboxOf([c], 2000), false); // 先読みはやり直さない
     if (!route) status('周辺の道のデータを準備しました。目的地を設定してください。');
   }
   catch (e) { status(''); }
@@ -146,14 +198,17 @@ function buildGraph(els) {
   for (let i = 0; i < lon.length; i++) if (onBridge[i] && !onGround[i]) floatN.push(i);
   return {lon, lat, adj, comp, main, ways, edges, emap, floatN};
 }
+// 版10：e.k＝歩いたことがある、e.k0＝今日より前に歩いたことがある（今日の未踏破＝k があって k0 がない道）
 function markWalked(g) {
-  g.edges.forEach(e => { e.k = 0; }); g.wIdx = null;
+  g.edges.forEach(e => { e.k = 0; e.k0 = 0; }); g.wIdx = null;
+  const d0 = new Date(); d0.setHours(0, 0, 0, 0);
   const bb = g.bb, kx = Math.cos((bb.s + bb.n) / 2 * Math.PI / 180) * 111320, ky = 110540, C = 40;
   const cell = p => [Math.floor((p[0] - bb.w) * kx / C), Math.floor((p[1] - bb.s) * ky / C)];
   const inBB = p => p[0] >= bb.w && p[0] <= bb.e && p[1] >= bb.s && p[1] <= bb.n;
   const grid = new Map(); let nseg = 0;
   tracks.forEach(t => {
     if (t.k === 'veh' || !t.pts) return;
+    const old = !(t.t0 >= d0.getTime());
     for (let i = 1; i < t.pts.length; i++) {
       const a = t.pts[i - 1], b = t.pts[i];
       if (!inBB(a) && !inBB(b)) continue;
@@ -161,28 +216,30 @@ function markWalked(g) {
       const ca = cell(a), cb = cell(b);
       for (let x = Math.min(ca[0], cb[0]); x <= Math.max(ca[0], cb[0]); x++)
         for (let y = Math.min(ca[1], cb[1]); y <= Math.max(ca[1], cb[1]); y++) {
-          const k = x + ',' + y; let l = grid.get(k); if (!l) { l = []; grid.set(k, l); } l.push([a, b]);
+          const k = x + ',' + y; let l = grid.get(k); if (!l) { l = []; grid.set(k, l); } l.push([a, b, old]);
         }
       nseg++;
     }
   });
   if (!nseg) return;
+  // 0＝近くに記録なし、1＝今日の記録だけ、2＝今日より前の記録もある
   const near = p => {
-    const [cx, cy] = cell(p);
+    const [cx, cy] = cell(p); let any = 0;
     for (let dx = -1; dx <= 1; dx++) for (let dy = -1; dy <= 1; dy++) {
       const l = grid.get((cx + dx) + ',' + (cy + dy));
-      if (l) for (const [a, b] of l) if (segDist(p, a, b).d <= 15) return true;
+      if (l) for (const [a, b, o] of l) if (segDist(p, a, b).d <= 15) { if (o) return 2; any = 1; }
     }
-    return false;
+    return any;
   };
   g.edges.forEach(e => {
     const A = [g.lon[e.a], g.lat[e.a]], B = [g.lon[e.b], g.lat[e.b]];
-    const n = Math.max(1, Math.ceil(e.w / 20)); let hit = 0;
+    const n = Math.max(1, Math.ceil(e.w / 20)); let hit = 0, hitO = 0;
     for (let i = 0; i < n; i++) {
-      const t = (i + 0.5) / n;
-      if (near([A[0] + (B[0] - A[0]) * t, A[1] + (B[1] - A[1]) * t])) hit++;
+      const t = (i + 0.5) / n, r = near([A[0] + (B[0] - A[0]) * t, A[1] + (B[1] - A[1]) * t]);
+      if (r) hit++; if (r === 2) hitO++;
     }
     if (hit / n >= 0.5) e.k = 1;
+    if (hitO / n >= 0.5) e.k0 = 1;
   });
 }
 

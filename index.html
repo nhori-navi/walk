@@ -85,6 +85,7 @@ body.walking.menu #panel{display:block;top:50%;bottom:52px;left:0;right:0;width:
     <div class="card" id="routeCard">
       <div id="rem">目的地を設定してください</div>
       <div id="sub"></div>
+      <div id="routeWhy"></div>
       <canvas id="prof"></canvas>
       <div id="result"></div>
       <div class="acts"><button id="walkBtn" class="primary">記録だけ始める</button><button id="altBtn" disabled>別の案</button><button id="favAdd" disabled>★登録</button><button id="recalcBtn" disabled>再計算</button><button id="routeClear">✕ ルートを消す</button></div>
@@ -123,7 +124,7 @@ body.walking.menu #panel{display:block;top:50%;bottom:52px;left:0;right:0;width:
       <div class="ch"><span id="playSum">あそぶ（踏破マス・スタンプ帳・東海道）</span></div>
       <div id="meshStat" class="row"></div>
       <div class="small"><label><input type="checkbox" id="meshChk">地図に踏破マスを表示（約125m四方。国の地域メッシュの区切り）</label></div>
-      <div class="small">マスの中の道を全部（残り30m未満まで）歩くと完全制覇で金色になります。表示中にマスをタップすると、残りの長さと、まだ歩いていない道（赤い点線）が出ます。車道沿いの別線の歩道・横断歩道・駐車場の通路は数えません。道のデータを読み込んだ範囲のマスだけ判定できます。</div>
+      <div class="small">マスの中の道を全部（残り30m未満まで）歩くと完全制覇で金色になります。表示中にマスをタップすると、残りの長さと、まだ歩いていない道（赤い点線）が出ます。車道沿いの別線の歩道・横断歩道・駐車場の通路は数えません。道のデータを読み込んだ範囲のマスだけ判定できます。データのないマスをタップすると「この辺りの道のデータを読み込む」が出ます。吹き出しは、ほかの場所をタップすると消えます。</div>
       <div class="row" style="margin-top:6px">あと少しのマス（残り200m以下・近い順）</div>
       <div id="nearList" class="lst"></div>
     </div>
@@ -198,8 +199,9 @@ body.walking.menu #panel{display:block;top:50%;bottom:52px;left:0;right:0;width:
     </div>
     <div class="card">
       <div class="ch" id="setHead">道のデータ</div>
-      <div class="small">道のデータはこの端末に30日間保存して使い回します。OpenStreetMap を書き足したあとなどは、下のボタンで取り直してください。</div>
+      <div class="small">道のデータは約2km四方のマスごとに取り、この端末に30日間保存して使い回します（150マスまで）。OpenStreetMap を書き足したあとなどは、下のボタンで取り直してください。</div>
       <div class="acts"><button id="netReset">道のデータを取り直す</button></div>
+      <div id="netAsk" class="ask"><div id="netAskText"></div><div class="acts"><button id="netYes" class="danger">取り直す</button><button id="netNo">やめる</button></div></div>
     </div>
   <details class="card">
     <summary>この端末の外へ送る情報</summary>
@@ -228,16 +230,16 @@ window.addEventListener('error', e => {
   if (el) el.textContent = el.textContent ? el.textContent + ' ／ ' + m : m;
 }, true);
 </script>
-<script src="config.js?v=9"></script>
-<script src="base.js?v=9"></script>
-<script src="road.js?v=9"></script>
-<script src="poi.js?v=9"></script>
-<script src="walk.js?v=9"></script>
-<script src="play.js?v=9"></script>
-<script src="tokaido.js?v=9"></script>
-<script src="tabi.js?v=9"></script>
-<script src="app.js?v=9"></script>
-<script src="ui.js?v=9"></script>
-<script src="help.js?v=9"></script>
+<script src="config.js?v=10"></script>
+<script src="base.js?v=10"></script>
+<script src="road.js?v=10"></script>
+<script src="poi.js?v=10"></script>
+<script src="walk.js?v=10"></script>
+<script src="play.js?v=10"></script>
+<script src="tokaido.js?v=10"></script>
+<script src="tabi.js?v=10"></script>
+<script src="app.js?v=10"></script>
+<script src="ui.js?v=10"></script>
+<script src="help.js?v=10"></script>
 </body>
 </html>
