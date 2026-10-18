@@ -4,7 +4,8 @@ mapboxgl.accessToken = TOKEN;
 const lastPos = loadJSON('walk_lastpos', 'null');
 const map = new mapboxgl.Map({
   container: 'map', style: 'mapbox://styles/mapbox/standard',
-  center: Array.isArray(lastPos) ? lastPos : JAPAN, zoom: Array.isArray(lastPos) ? 14 : JAPAN_Z, language: 'ja'
+  center: Array.isArray(lastPos) ? lastPos : JAPAN, zoom: Array.isArray(lastPos) ? 14 : JAPAN_Z, language: 'ja',
+  config: {basemap: {lightPreset: themeState().preset}} // 版12：夜は初めから夜の地図で開く（白く光らないように）
 });
 map.addControl(new mapboxgl.NavigationControl(), 'top-right');
 

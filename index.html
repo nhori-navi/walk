@@ -183,6 +183,11 @@ body.walking.menu #panel{display:block;top:50%;bottom:52px;left:0;right:0;width:
       <div id="helpSlot"></div>
     </div>
     <div class="card">
+      <div class="ch" id="themeHead">画面の明るさ</div>
+      <div class="row"><select id="themeSel"><option value="auto">自動（夜は暗く）</option><option value="light">いつも明るい</option><option value="dark">いつも暗い</option></select></div>
+      <div class="small">自動は、今いる場所の日の入りから日の出まで、画面と地図を暗くします（地図は夕方・明け方の色をはさんで夜の表示になります）。<br>地図と下の境目にある横棒（つまみ）を上下に動かすと、地図の広さを変えられます。2回タップで半分に戻ります（スマホだけ）。</div>
+    </div>
+    <div class="card">
       <div class="ch" id="viewHead">地図に出すもの</div>
       <div class="small"><label><input type="checkbox" id="walkedChk" checked>歩いた道（緑）</label>　<label><input type="checkbox" id="vehChk">乗り物の区間（赤）</label></div>
       <div class="small"><label><input type="checkbox" id="poiShow">神社・寺・公園（印をタップすると名前）</label></div>
@@ -233,16 +238,16 @@ window.addEventListener('error', e => {
   if (el) el.textContent = el.textContent ? el.textContent + ' ／ ' + m : m;
 }, true);
 </script>
-<script src="config.js?v=11"></script>
-<script src="base.js?v=11"></script>
-<script src="road.js?v=11"></script>
-<script src="poi.js?v=11"></script>
-<script src="walk.js?v=11"></script>
-<script src="play.js?v=11"></script>
-<script src="tokaido.js?v=11"></script>
-<script src="tabi.js?v=11"></script>
-<script src="app.js?v=11"></script>
-<script src="ui.js?v=11"></script>
-<script src="help.js?v=11"></script>
+<script src="config.js?v=12"></script>
+<script src="base.js?v=12"></script>
+<script src="road.js?v=12"></script>
+<script src="poi.js?v=12"></script>
+<script src="walk.js?v=12"></script>
+<script src="play.js?v=12"></script>
+<script src="tokaido.js?v=12"></script>
+<script src="tabi.js?v=12"></script>
+<script src="app.js?v=12"></script>
+<script src="ui.js?v=12"></script>
+<script src="help.js?v=12"></script>
 </body>
 </html>

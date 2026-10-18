@@ -61,9 +61,10 @@ function turnText(t) {
 function turnHtml() {
   const n = nextTurn(); if (!n) return '';
   const {ar, tx} = turnText(n.t);
-  if (n.dist <= 20) return `<div class="turn">${ar} まもなく ${tx}</div>`;
-  if (n.dist <= 150) return `<div class="turn">${ar} ${fmtDist(n.dist)}先 ${tx}</div>`;
-  return `<div class="small" style="margin:0">次の案内まで ${fmtDist(n.dist)}</div>`;
+  if (n.dist > 150) return `<div class="small" style="margin:0">次の案内まで ${fmtDist(n.dist)}</div>`;
+  // 版12：矢印を大きく。20m以内は赤く塗って目立たせる
+  const near = n.dist <= 20;
+  return `<div class="turn${near ? ' now' : ''}">${ar ? `<span class="tar">${ar}</span>` : ''}<span class="ttx">${near ? 'まもなく' : fmtDist(n.dist) + '先'} <b>${tx}</b></span></div>`;
 }
 // 案内の40m手前で一度だけ振動する
 function maybeVibrate() {
@@ -432,7 +433,7 @@ function processSeg(raw, src) {
 }
 // ---------- 全部まとめて書き出す・読み込む ----------
 // 書き出す設定（値は保存している文字のまま）。東海道は起点と進み具合を組で扱う
-const BK_SET = ['walk_weight', 'walk_vib', 'walk_autofollow', 'walk_offshow', 'walk_meshshow', 'walk_cmp', 'walk_reroute', 'walk_loopdir'];
+const BK_SET = ['walk_weight', 'walk_vib', 'walk_autofollow', 'walk_offshow', 'walk_meshshow', 'walk_cmp', 'walk_reroute', 'walk_loopdir', 'walk_theme'];
 const BK_TK = ['walk_tokaido_from', 'walk_tokaido_last'];
 const ymdNum = d => `${d.getFullYear()}${String(d.getMonth() + 1).padStart(2, '0')}${String(d.getDate()).padStart(2, '0')}`;
 const trackKey = t => `${t.t0}|${t.k || 'walk'}|${t.pts[0]}`;

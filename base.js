@@ -368,3 +368,28 @@ function drawProf(a) {
   cx.fillText('0', X(0), Hh - 3); const tl = fmtDist(total); cx.fillText(tl, W - 6 - cx.measureText(tl).width, Hh - 3);
 }
 window.addEventListener('resize', () => { if (route) drawProf(route.a); });
+
+// ---------- 版12：画面の明るさ（自動は今いる場所の太陽の高さで決める） ----------
+// 太陽の高さ（度）。精度は1°ほど（日の入り・日の出の判定には十分）
+function sunAlt(lng, lat, t) {
+  const R = Math.PI / 180, d = (t - 946728000000) / 864e5;
+  const g = (357.529 + 0.98560028 * d) * R, q = 280.459 + 0.98564736 * d;
+  const L = (q + 1.915 * Math.sin(g) + 0.020 * Math.sin(2 * g)) * R, e = (23.439 - 0.00000036 * d) * R;
+  const ra = Math.atan2(Math.cos(e) * Math.sin(L), Math.cos(L)), dec = Math.asin(Math.sin(e) * Math.sin(L));
+  const ha = (280.46061837 + 360.98564736629 * d + lng) * R - ra;
+  return Math.asin(Math.sin(lat * R) * Math.sin(dec) + Math.cos(lat * R) * Math.cos(dec) * Math.cos(ha)) / R;
+}
+// {dark：画面を暗くするか, preset：地図の明るさ（day／dawn／dusk／night）}
+// 自動：日の入り（太陽 −0.83°）から日の出まで暗く。地図は、薄明かり（−6°まで）の間は夕方・明け方の色、そのあとは夜
+function themeState(t) {
+  const m = getLS('walk_theme') || 'auto';
+  if (m === 'light') return {dark: false, preset: 'day'};
+  if (m === 'dark') return {dark: true, preset: 'night'};
+  t = t || Date.now();
+  const lp = loadJSON('walk_lastpos', 'null');
+  const p = (typeof pos !== 'undefined' && pos) || (typeof startPt !== 'undefined' && startPt) || (Array.isArray(lp) ? lp : [139.69, 35.69]);
+  const a = sunAlt(p[0], p[1], t);
+  if (a >= -0.83) return {dark: false, preset: 'day'};
+  if (a < -6) return {dark: true, preset: 'night'};
+  return {dark: true, preset: sunAlt(p[0], p[1], t + 600000) < a ? 'dusk' : 'dawn'};
+}

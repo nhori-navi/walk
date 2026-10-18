@@ -1,12 +1,12 @@
-// MichiMiru：画面の骨組み（版9）。下のタブ、地図の丸いボタン、ルートの結果のカード、道の好みの「押して選ぶ並び」、見た目
+// MichiMiru：画面の骨組み（版9。版12で境目のつまみ・画面の明るさ・歩行中の画面）。下のタブ、地図の丸いボタン、ルートの結果のカード、道の好みの「押して選ぶ並び」、見た目
 // app.js のあと・help.js の前に読む。部品の id と動きは変えず、見せ方だけを変える
 (function () {
   const st = document.createElement('style');
   st.textContent = `
 :root{--g:#1e7e34;--g2:#27ae60;--gl:#e8f5ec;--line:#d5ddd8;--ink:#23322a}
 body{background:#f2f5f3;color:var(--ink)}
-#map{height:50%}
-#panel{top:50%;bottom:64px;background:#f2f5f3;padding:8px 10px 14px;border-top:1px solid var(--line)}
+#map{height:var(--split,50%)}
+#panel{top:var(--split,50%);bottom:64px;background:#f2f5f3;padding:8px 10px 14px;border-top:1px solid var(--line)}
 @media (min-width:900px){
   #map{height:auto;bottom:0;right:380px}
   #panel{top:0;bottom:64px;left:auto;width:380px;border-top:none;border-left:1px solid var(--line)}
@@ -22,9 +22,9 @@ body{background:#f2f5f3;color:var(--ink)}
 #tabbar .fab{flex:0 0 76px;margin:-18px 2px 6px;padding:0;border:4px solid #fff;border-radius:38px;background:var(--g);color:#fff;font-size:12px;font-weight:bold;display:flex;flex-direction:column;align-items:center;justify-content:center;box-shadow:0 2px 8px rgba(0,0,0,.3);min-height:0}
 #tabbar .fab .ic{font-size:24px;line-height:1.1}
 body.walking #tabbar{display:none}
-body.walking.menu #tabbar{display:flex;bottom:52px}
+body.walking.menu #tabbar{display:flex;bottom:64px}
 body.walking.menu #tabbar .fab{visibility:hidden}
-body.walking.menu #panel{bottom:116px}
+body.walking.menu #panel{bottom:128px}
 /* タブの中身 */
 .pane{display:none}
 .pane.on{display:block}
@@ -78,6 +78,88 @@ body.mode-tk #mapBtns,body.mode-tabi #mapBtns{display:none}
 .meshPop.mapboxgl-popup-anchor-top .mapboxgl-popup-tip{border-bottom-color:rgba(255,255,255,.78)}
 .meshPop .meshLoad{margin:4px 0 0;padding:4px 10px;min-height:32px;border-radius:8px;border:1px solid #1e7e34;background:#1e7e34;color:#fff;font-size:13px}
 #status{margin:0 0 6px}
+
+/* 版12：境目のつまみ（スマホだけ。地図の高さ＝--split） */
+body.walking.menu #map{height:var(--split,50%)}
+body.walking.menu #panel{top:var(--split,50%)}
+#grip{position:fixed;left:50%;top:var(--split,50%);transform:translate(-50%,-50%);z-index:9;width:120px;height:30px;display:flex;align-items:center;justify-content:center;touch-action:none;cursor:ns-resize;-webkit-user-select:none;user-select:none}
+#grip::before{content:'';display:block;width:64px;height:6px;border-radius:3px;background:#8a9a91;box-shadow:0 0 0 3px rgba(255,255,255,.85),0 1px 4px rgba(0,0,0,.35)}
+#grip.drag::before{background:var(--g);width:84px}
+body.walking:not(.menu) #grip{display:none}
+@media (min-width:900px){#grip{display:none}}
+/* 版12：歩行中の下の帯（大きなボタン・終了は赤） */
+#tab{height:64px;gap:6px;padding:6px 8px;background:#fff;border-top:1px solid var(--line);box-shadow:0 -1px 4px rgba(0,0,0,.08)}
+#tab button{flex:1;min-width:0;height:52px;margin:0;padding:2px 4px;border-radius:12px;border:1px solid var(--line);background:#fff;color:var(--ink);font-size:14px;font-weight:bold;white-space:nowrap;line-height:1.2}
+#tab #endBtn{white-space:normal}
+body.walking #walkBtn,body.walking #walkBtn + .qb{display:none}
+#tab #endBtn{background:#c0392b;border-color:#c0392b;color:#fff}
+#tab #endBtn.arm{background:#7b1d14;border-color:#7b1d14;animation:arm .6s ease-in-out infinite alternate}
+@keyframes arm{to{background:#e74c3c}}
+body.walking #map{bottom:64px}
+/* 版12：歩行中の案内（矢印を大きく） */
+#hud{max-width:calc(100% - 76px)}
+#hud .turn{display:flex;align-items:center;gap:8px;margin:0 0 4px;padding:3px 10px 3px 4px;border-radius:10px;background:#fdecea;color:#c0392b;font-size:15px;font-weight:normal}
+#hud .turn .tar{font-size:48px;line-height:1;min-width:54px;text-align:center;font-weight:bold}
+#hud .turn .ttx{line-height:1.25}
+#hud .turn .ttx b{display:block;font-size:24px}
+#hud .turn.now{background:#c0392b;color:#fff}
+/* 版12：暗い画面 */
+body.dark{--ink:#e3e8e5;--line:#3a4540;--gl:#1d3a27;background:#121614;color:var(--ink);color-scheme:dark}
+body.dark #panel{background:#121614;border-color:#2a332e}
+body.dark .card,body.dark details{background:#1b221f;border-color:#2c3631;box-shadow:none}
+body.dark .ch,body.dark summary{color:#8fd19e}
+body.dark #panel button,body.dark #panel input[type=number],body.dark #panel input:not([type]),body.dark #search,body.dark select{background:#232b27;color:var(--ink);border-color:var(--line)}
+body.dark #panel button.primary{background:#1e7e34;border-color:#2e9e4c;color:#fff}
+body.dark #panel button.danger{color:#ff8a7a;border-color:#7a3a35}
+body.dark #panel .chips button.on{background:#1e7e34;border-color:#2e9e4c;color:#fff}
+body.dark .tg label{background:#232b27;border-color:var(--line)}
+body.dark .tg label:has(input:checked){background:var(--gl);border-color:#2e9e4c;color:#8fd19e}
+body.dark .small{color:#9aa8a0}
+body.dark .row{color:#cfd8d3}
+body.dark #sub{color:#b8c4bd}
+body.dark #result{color:#8ab4f8}
+body.dark a{color:#8ab4f8}
+body.dark .hit{background:#1b221f;border-color:#2c3631}
+body.dark .lst{border-color:#2c3631}
+body.dark #prof{filter:invert(.88) hue-rotate(180deg);border-color:#2c3631}
+body.dark [style*="color:#333"]{color:#cfd8d3!important}
+body.dark [style*="color:#1e7e34"]{color:#6fcf87!important}
+body.dark [style*="background:#e8ece9"]{background:#2c3631!important}
+body.dark .fav,body.dark #warn,body.dark #impBox,body.dark #favForm,body.dark #routeWhy{background:#2e2818;border-color:#8a6d1a;color:#f3e3b0}
+body.dark .ask{background:#341c1a;border-color:#7a3a35;color:#f5c6c0}
+body.dark #tabbar{background:#1a201d;border-color:#2a332e}
+body.dark #tabbar .tb{color:#9aa8a0}
+body.dark #tabbar .tb.on{color:#6fcf87}
+body.dark #tabbar .tb.on::after{background:#6fcf87}
+body.dark #tabbar .fab{border-color:#1a201d}
+body.dark #tab{background:#1a201d;border-color:#2a332e}
+body.dark #tab button{background:#232b27;color:var(--ink);border-color:var(--line)}
+body.dark #tab #endBtn{background:#c0392b;border-color:#c0392b;color:#fff}
+body.dark #hud{background:rgba(27,34,31,.92);color:#e3e8e5}
+body.dark #hud .turn{background:#4a1f1b;color:#ff9a8c}
+body.dark #hud .turn.now{background:#c0392b;color:#fff}
+body.dark #hud [style*="color:#555"]{color:#b8c4bd!important}
+body.dark #hud [style*="color:#1f6fd1"]{color:#8ab4f8!important}
+body.dark #hud [style*="background:#fdecea"]{background:#4a1f1b!important;color:#ff9a8c!important}
+body.dark #mapBtns button{background:#232b27;color:#8ab4f8}
+body.dark #mapBtns button.on{background:#1f6fd1;color:#fff}
+body.dark #grip::before{background:#9aa8a0;box-shadow:0 0 0 3px rgba(27,34,31,.9),0 1px 4px rgba(0,0,0,.5)}
+body.dark #mbar{background:rgba(40,36,25,.9);color:#eee;border-color:#8a6d1a}
+body.dark #mbar button{color:#eee;border-color:#555}
+body.dark #mbMore{border-color:#5a4a20}
+body.dark .mapboxgl-popup-content,body.dark .meshPop .mapboxgl-popup-content{background:rgba(27,34,31,.85);color:#e3e8e5}
+body.dark .mapboxgl-popup-anchor-bottom .mapboxgl-popup-tip{border-top-color:rgba(27,34,31,.85)!important}
+body.dark .mapboxgl-popup-anchor-top .mapboxgl-popup-tip{border-bottom-color:rgba(27,34,31,.85)!important}
+body.dark .mapboxgl-popup-close-button{color:#e3e8e5}
+body.dark .pmk{background:#1b221f;color:#e3e8e5;border-color:#9aa8a0}
+body.dark #tip{background:#2e2818;color:#f3e3b0;border-color:#8a6d1a}
+body.dark #tip b{color:#ffd54f}
+body.dark #tipX{color:#f3e3b0}
+body.dark #helpBox{background:#121614;color:var(--ink)}
+body.dark #helpBox details{background:none;border-color:#2c3631}
+body.dark #helpBox summary{color:#8fd19e}
+body.dark #helpBox details[open] summary{color:#ff8a7a}
+body.dark .qb,body.dark #panel .qb{background:#232b27;color:#6fcf87;border-color:#6fcf87}
 `;
   document.head.appendChild(st);
 
@@ -159,6 +241,72 @@ body.mode-tk #mapBtns,body.mode-tabi #mapBtns{display:none}
     if (v('ext') !== '0') t.push('延長 ' + nm('ext'));
     return t.length ? '：' + t.join('・') : '：ふつう（最短）';
   }
+
+
+  // ---------- 版12：境目のつまみ（地図と下の境目を指で上下に。20%〜75%、2回タップで50%） ----------
+  const SPLIT0 = 50;
+  const grip = document.createElement('div'); grip.id = 'grip'; grip.title = '上下に動かすと地図の広さが変わります（2回タップで半分に戻る）';
+  document.body.appendChild(grip);
+  function setSplit(v, save) {
+    v = Math.max(20, Math.min(75, v));
+    document.documentElement.style.setProperty('--split', v.toFixed(1) + '%');
+    if (save) lsSet('walk_split', v.toFixed(1));
+    return v;
+  }
+  setSplit(Number(getLS('walk_split')) || SPLIT0);
+  let gd = null, gTap = 0, gRaf = 0;
+  const resizeMap = () => { if (gRaf) return; gRaf = requestAnimationFrame(() => { gRaf = 0; map.resize(); }); };
+  grip.addEventListener('pointerdown', e => {
+    e.preventDefault();
+    try { grip.setPointerCapture(e.pointerId); } catch (x) {}
+    gd = {y: e.clientY, moved: false}; grip.classList.add('drag');
+  });
+  grip.addEventListener('pointermove', e => {
+    if (!gd) return;
+    if (Math.abs(e.clientY - gd.y) > 4) gd.moved = true;
+    if (!gd.moved) return;
+    gd.v = setSplit(e.clientY / window.innerHeight * 100); resizeMap();
+  });
+  function gripUp() {
+    if (!gd) return;
+    grip.classList.remove('drag');
+    if (gd.moved) { setSplit(gd.v, true); gTap = 0; }
+    else if (Date.now() - gTap < 400) { setSplit(SPLIT0, true); gTap = 0; }   // 2回タップで半分に戻す
+    else gTap = Date.now();
+    gd = null; setTimeout(() => map.resize(), 30);
+  }
+  grip.addEventListener('pointerup', gripUp);
+  grip.addEventListener('pointercancel', gripUp);
+  grip.addEventListener('dblclick', e => e.preventDefault());
+
+  // ---------- 版12：画面の明るさ（自動／いつも明るい／いつも暗い）。地図は Mapbox の明るさの切り替え（夕方・明け方・夜） ----------
+  $('themeSel').value = getLS('walk_theme') || 'auto';
+  chips('themeSel', ['自動（夜は暗く）', 'いつも明るい', 'いつも暗い']);
+  let presetNow = themeState().preset;
+  function applyTheme() {
+    const t = themeState();
+    document.body.classList.toggle('dark', t.dark);
+    if (t.preset !== presetNow) {
+      try { map.setConfigProperty('basemap', 'lightPreset', t.preset); presetNow = t.preset; } catch (e) {}  // 地図の準備がまだなら、次の判定でやり直す
+    }
+  }
+  window.applyTheme = applyTheme;
+  $('themeSel').addEventListener('change', () => { lsSet('walk_theme', $('themeSel').value); applyTheme(); syncChips(); });
+  map.on('style.load', () => { presetNow = ''; applyTheme(); });
+  applyTheme();
+  setInterval(applyTheme, 60000);
+
+  // ---------- 版12：歩行中の「終了」は2回押し（3秒以内にもう一度で終わる。ポケットの中などでの押し間違いを防ぐ） ----------
+  let endArm = 0, endTm = 0;
+  function endDisarm() { endArm = 0; clearTimeout(endTm); $('endBtn').classList.remove('arm'); $('endBtn').textContent = '■ 終了'; }
+  $('endBtn').textContent = '■ 終了';
+  $('endBtn').addEventListener('click', e => {
+    if (!walk || window.__noEndConfirm) { endDisarm(); return; }
+    if (endArm && Date.now() - endArm < 3000) { endDisarm(); return; }   // 2回目：そのまま終了へ
+    e.stopImmediatePropagation();
+    endArm = Date.now(); $('endBtn').classList.add('arm'); $('endBtn').textContent = 'もう一度で終了';
+    clearTimeout(endTm); endTm = setTimeout(endDisarm, 3000);
+  }, true);
 
   // ---------- 版10：ルートが出ないときの理由とボタン ----------
   let whyKey = '';
