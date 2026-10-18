@@ -91,6 +91,7 @@ function renderHud() {
     `<div>${v === null ? '—' : (v * 3.6).toFixed(1)} km/h　${Math.round(walk.kcal)} kcal</div>` +
     `<div class="small" style="margin:0">歩行 ${fmtTime(el)}・${fmtDist(walk.dist)}</div>` +
     (meshHud() ? `<div class="small" style="margin:0;color:#b9770e">${meshHud()}</div>` : '') +
+    (walk.askRR ? '<div style="margin:2px 0;padding:3px 6px;border-radius:6px;background:#fdecea;color:#c0392b;font-weight:bold">⚠ ルートを外れました。ここをタップして組み直す</div>' : '') +
     (walk.badSince && now - walk.badSince >= 10000 ? `<div class="small" style="margin:0;color:#c00">位置が粗いので記録を止めています（精度 約${fmtAcc(walk.acc)}）</div>` : '') +
     (walk.note && now < walk.noteUntil ? `<div class="small" style="margin:0;color:#1f6fd1">${walk.note}</div>` : '') +
     (walk.msg && now < walk.msgUntil ? `<div class="small" style="margin:0;max-width:240px;color:${walk.msgErr ? '#c00' : '#555'}">${esc(walk.msg)}</div>` : '');
@@ -431,7 +432,7 @@ function processSeg(raw, src) {
 }
 // ---------- 全部まとめて書き出す・読み込む ----------
 // 書き出す設定（値は保存している文字のまま）。東海道は起点と進み具合を組で扱う
-const BK_SET = ['walk_weight', 'walk_vib', 'walk_autofollow', 'walk_offshow', 'walk_meshshow', 'walk_cmp'];
+const BK_SET = ['walk_weight', 'walk_vib', 'walk_autofollow', 'walk_offshow', 'walk_meshshow', 'walk_cmp', 'walk_reroute', 'walk_loopdir'];
 const BK_TK = ['walk_tokaido_from', 'walk_tokaido_last'];
 const ymdNum = d => `${d.getFullYear()}${String(d.getMonth() + 1).padStart(2, '0')}${String(d.getDate()).padStart(2, '0')}`;
 const trackKey = t => `${t.t0}|${t.k || 'walk'}|${t.pts[0]}`;

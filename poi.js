@@ -138,7 +138,7 @@ async function poiLoopN(g, s0, from, T, cand, n) {
     }
     if (!ok) continue;
     nodes.push(s0.i);
-    const idx = legsPath(g, nodes); if (!idx) continue;
+    const idx = legsPath(g, nodes, true); if (!idx) continue; // 版11：行きの道を帰りで使いにくく
     if (overlapRatio(g, idx) > 0.35) continue;
     const len = pathLen(g, idx); if (Math.abs(len - T) > T * 0.35) continue;
     out.push({idx, stops: v.cb, err: Math.abs(len - T) + (v.cb.length - v.unv) * T * 0.15});

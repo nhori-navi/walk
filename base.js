@@ -25,6 +25,7 @@ function modeOpen(m, closer) {
   if (mapMode === m) return false;
   if (mapMode) modeClose();
   mapMode = m; modeCloser = closer;
+  if (typeof closeMeshPop === 'function') closeMeshPop(); // 版11：いつもの地図のマスの吹き出しを持ち込まない
   modeView = {c: map.getCenter().toArray(), z: map.getZoom()};
   document.body.classList.add('mode-' + m);
   $('mbar').classList.toggle('open', getLS('walk_mbar_' + m) === '1');

@@ -102,6 +102,7 @@ body.walking.menu #panel{display:block;top:50%;bottom:52px;left:0;right:0;width:
     <div class="card">
       <div class="ch">周回コース</div>
       <div class="row">距離：<select id="loopKm"><option>1</option><option>2</option><option selected>3</option><option>5</option></select></div>
+      <div class="row">向き：<select id="loopDir"><option value="auto">おまかせ</option><option value="cw">時計回り</option><option value="ccw">反時計回り</option></select></div>
       <div class="acts"><button id="loopBtn" class="primary">🔁 周回コースを作る</button></div>
     </div>
     <details class="card" id="prefs">
@@ -195,6 +196,8 @@ body.walking.menu #panel{display:block;top:50%;bottom:52px;left:0;right:0;width:
       <div class="row"><label><input type="checkbox" id="vibChk">曲がり角の手前で振動する（Androidのみ）</label> <button id="vibTest">振動テスト</button></div>
       <div id="vibMsg" class="small"></div>
       <div class="row"><label><input type="checkbox" id="autoFollowChk">地図を触ってから20秒たったら現在地の追従に戻す</label></div>
+      <div class="row">道を外れたら：<select id="rrMode"><option value="auto">自動で組み直す</option><option value="ask">聞いてから</option><option value="off">しない</option></select></div>
+      <div class="small">ルートから40m以上離れて15秒たったら組み直します。未踏破・坂・遊歩道の好みはそのまま、経由地・寄り道先はまだ通っていない所だけ通り、延長や周回の距離は最初の予定の全長に合わせます（余計に歩いた分は延長に数えます）。たった今歩いてきた道は戻りにくくします。「聞いてから」のときは、左上の表示をタップすると組み直します。</div>
       <div class="row">体重：<input id="weight" type="number" min="20" max="200" step="0.5" style="width:90px">kg（カロリー計算用。この端末の中にだけ保存）</div>
     </div>
     <div class="card">
@@ -230,16 +233,16 @@ window.addEventListener('error', e => {
   if (el) el.textContent = el.textContent ? el.textContent + ' ／ ' + m : m;
 }, true);
 </script>
-<script src="config.js?v=10"></script>
-<script src="base.js?v=10"></script>
-<script src="road.js?v=10"></script>
-<script src="poi.js?v=10"></script>
-<script src="walk.js?v=10"></script>
-<script src="play.js?v=10"></script>
-<script src="tokaido.js?v=10"></script>
-<script src="tabi.js?v=10"></script>
-<script src="app.js?v=10"></script>
-<script src="ui.js?v=10"></script>
-<script src="help.js?v=10"></script>
+<script src="config.js?v=11"></script>
+<script src="base.js?v=11"></script>
+<script src="road.js?v=11"></script>
+<script src="poi.js?v=11"></script>
+<script src="walk.js?v=11"></script>
+<script src="play.js?v=11"></script>
+<script src="tokaido.js?v=11"></script>
+<script src="tabi.js?v=11"></script>
+<script src="app.js?v=11"></script>
+<script src="ui.js?v=11"></script>
+<script src="help.js?v=11"></script>
 </body>
 </html>

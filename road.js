@@ -244,7 +244,8 @@ function markWalked(g) {
 }
 
 // 歩行中：新しく歩いた区間（pts の点の並び）の近くの道にだけ「歩いた」の印を足す。印が増えたら true
-function markWalkedPts(g, pts) {
+// 版11：flag='u' で「たった今歩いてきた道」の印（組み直しで戻りにくくする）にも使う。印を付けた道の一覧は list に入れる
+function markWalkedPts(g, pts, flag = 'k', list) {
   if (!g || !pts || pts.length < 2) return false;
   const segs = [];
   for (let i = 1; i < pts.length; i++) if (distM(pts[i - 1], pts[i]) <= 80) segs.push([pts[i - 1], pts[i]]);
@@ -254,7 +255,7 @@ function markWalkedPts(g, pts) {
   segs.forEach(([a, b]) => { w = Math.min(w, a[0], b[0]); e = Math.max(e, a[0], b[0]); s = Math.min(s, a[1], b[1]); n = Math.max(n, a[1], b[1]); });
   const m = 0.0005; let ch = false;
   g.edges.forEach(ed => {
-    if (ed.k) return;
+    if (ed[flag]) return;
     const A = [g.lon[ed.a], g.lat[ed.a]], B = [g.lon[ed.b], g.lat[ed.b]];
     if (Math.max(A[0], B[0]) < w - m || Math.min(A[0], B[0]) > e + m || Math.max(A[1], B[1]) < s - m || Math.min(A[1], B[1]) > n + m) return;
     const k = Math.max(1, Math.ceil(ed.w / 20)); let hit = 0;
@@ -262,9 +263,9 @@ function markWalkedPts(g, pts) {
       const t = (i + 0.5) / k;
       if (idx.near([A[0] + (B[0] - A[0]) * t, A[1] + (B[1] - A[1]) * t], 15)) hit++;
     }
-    if (hit / k >= 0.5) { ed.k = 1; ch = true; }
+    if (hit / k >= 0.5) { ed[flag] = 1; ch = true; if (list) list.push(ed); }
   });
-  if (ch) g.wIdx = null;
+  if (ch && flag === 'k') g.wIdx = null;
   return ch;
 }
 
@@ -370,6 +371,7 @@ function astar(g, s, t) {
     if (v === t) break;
     for (const [u, e] of g.adj[v]) {
       let c = (e.k ? e.w * mult : e.w) * ff[e.c || 0];
+      if (e.u) c *= e.u === 2 ? RECENT_F : REUSE_F; // 版11：前の区間で使った道（×4）・たった今歩いてきた道（×10）は使いにくく
       if (sm) c = slopeCost(c, e, ele ? ele[v] : NaN, ele ? ele[u] : NaN, sm);
       const nd = d[v] + c;
       if (nd < d[u]) { d[u] = nd; prev[u] = v; H.push(nd + h(u), u); }
@@ -395,14 +397,25 @@ function unexpRatio(g, idx) {
   }
   return L ? U / L : 1;
 }
-function legsPath(g, nodes) {
-  let p = [];
-  for (let k = 0; k < nodes.length - 1; k++) {
-    const seg = astar(g, nodes[k], nodes[k + 1]);
-    if (!seg) return null;
-    p = p.concat(k ? seg.slice(1) : seg);
-  }
-  return p;
+// 版11：avoid＝前の区間で使った道を、あとの区間では使いにくくする（周回で行きと帰りが重ならないように）
+const REUSE_F = 4, RECENT_F = 10;
+function legsPath(g, nodes, avoid) {
+  let p = []; const used = [];
+  try {
+    for (let k = 0; k < nodes.length - 1; k++) {
+      const seg = astar(g, nodes[k], nodes[k + 1]);
+      if (!seg) return null;
+      p = p.concat(k ? seg.slice(1) : seg);
+      if (avoid) for (let i = 1; i < seg.length; i++) { const e = g.emap.get(edgeKey(seg[i - 1], seg[i])); if (e && !e.u) { e.u = 1; used.push(e); } }
+    }
+    return p;
+  } finally { used.forEach(e => { e.u = 0; }); }
+}
+// 周回の向き（面積の符号。正＝反時計回り）
+function loopArea(g, idx) {
+  let a = 0; const k = Math.cos(g.lat[idx[0]] * Math.PI / 180);
+  for (let i = 1; i < idx.length; i++) a += (g.lon[idx[i - 1]] * k) * g.lat[idx[i]] - (g.lon[idx[i]] * k) * g.lat[idx[i - 1]];
+  return a / 2;
 }
 function edgeSet(idx) { const s = new Set(); for (let i = 1; i < idx.length; i++) s.add(edgeKey(idx[i - 1], idx[i])); return s; }
 function overlapRatio(g, idx) {

@@ -172,15 +172,16 @@ function tabiRefresh() { if (tabiOn() && cityD) tabiDraw(false); }
 // ---------- タップ：電車・車の線なら直す、市区町村ならその名前 ----------
 function tabiTap(e) {
   if (!cityD) return;
+  if (tabiPop) { tabiPop.remove(); tabiPop = null; return; } // 版11：吹き出しが出ているときは、ほかをタップすると消すだけ
   let f = [];
   try { f = map.queryRenderedFeatures([[e.point.x - 12, e.point.y - 12], [e.point.x + 12, e.point.y + 12]], {layers: ['tabiLine', 'tabiGap']}); } catch (er) {}
   const v = f.find(x => x.properties.m !== 'walk');
-  if (tabiPop) tabiPop.remove();
-  if (v) { tabiPop = new mapboxgl.Popup({closeButton: true}).setLngLat(e.lngLat).setHTML(tabiVehHtml(v.properties.i)).addTo(map); tabiBind(); return; }
+  const PO = {closeButton: false, closeOnClick: false, className: 'meshPop', maxWidth: '260px'}; // 版11：半透明の吹き出し
+  if (v) { tabiPop = new mapboxgl.Popup(PO).setLngLat(e.lngLat).setHTML(tabiVehHtml(v.properties.i)).addTo(map); tabiBind(); return; }
   const c = cityAt([e.lngLat.lng, e.lngLat.lat]);
   if (c < 0) { tabiPop = null; return; }
   const ct = cityD.cities[c], st = tabiRes && tabiRes.walked.has(c) ? '歩いた' : tabiRes && tabiRes.passed.has(c) ? '乗り物で通った' : 'まだ';
-  tabiPop = new mapboxgl.Popup({closeButton: true}).setLngLat(e.lngLat).setText(`${ct.pref}${ct.name}（${st}）`).addTo(map);
+  tabiPop = new mapboxgl.Popup(PO).setLngLat(e.lngLat).setText(`${ct.pref}${ct.name}（${st}）`).addTo(map);
 }
 function tabiVehHtml(i) {
   const t = tracks[i]; if (!t) return '';
@@ -191,7 +192,7 @@ function tabiVehHtml(i) {
     (auto ? '' : `<button data-tm="" data-ti="${i}">自動に戻す</button>`) + '</div>';
 }
 function tabiBind() {
-  document.querySelectorAll('.tabiPop [data-tm]').forEach(b => b.onclick = () => tabiSetMode(Number(b.dataset.ti), b.dataset.tm));
+  document.querySelectorAll('.tabiPop [data-tm]').forEach(b => b.onclick = ev => { ev.stopPropagation(); tabiSetMode(Number(b.dataset.ti), b.dataset.tm); });
 }
 function tabiSetMode(i, m) {
   const t = tracks[i]; if (!t) return;

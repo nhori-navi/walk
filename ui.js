@@ -141,6 +141,8 @@ body.mode-tk #mapBtns,body.mode-tabi #mapBtns{display:none}
   chips('foot');
   chips('poiN', ['1か所', '2か所', '3か所']);
   chips('loopKm', ['1km', '2km', '3km', '5km']);
+  chips('loopDir', ['おまかせ', '時計回り', '反時計回り']);
+  chips('rrMode', ['自動', '聞いてから', 'しない']);
   function syncChips() { chipSets.forEach(([sel, w]) => w.querySelectorAll('button').forEach(b => b.classList.toggle('on', b.dataset.v === sel.value))); }
   window.chipOf = id => { const s = chipSets.find(([sel]) => sel.id === id); return s ? s[1] : $(id); };
   // 道の好みの開け閉めを覚える（初めは開いておく）
@@ -189,6 +191,7 @@ body.mode-tk #mapBtns,body.mode-tabi #mapBtns{display:none}
     b.toggle('has-plan', !!(route || dest || vias.length || startPt));
     const wr = waitingRoute();
     $('walkFabTx').textContent = route ? '歩き始める' : wr ? (calcState.k === 'calc' ? '計算中…' : '計算待ち') : '記録だけ';
+    $('recalcBtn').textContent = walk && route ? '🔄 組み直す' : '再計算';
     showWhy(wr);
     $('mFollow').classList.toggle('on', !!follow);
     $('mFollow').title = follow ? '現在地に追従しています（押すと止める）' : '現在地に戻る';
