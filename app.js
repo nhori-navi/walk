@@ -360,7 +360,7 @@ function drawVias() {
 }
 function clearVia() { vias = []; drawVias(); }
 function setDest(p) {
-  dest = p; clearVia();
+  dest = p; clearVia(); owSel = null; // 版13：片道散歩で選んだ駅は、目的地を選び直したら外す
   if (destMarker) destMarker.remove();
   destMarker = new mapboxgl.Marker({color: '#c0392b'}).setLngLat(p).addTo(map);
   $('recalcBtn').disabled = false; $('favAdd').disabled = false;
@@ -388,7 +388,7 @@ $('poiShow').onchange = () => {
   drawPois();
 };
 $('routeClear').onclick = () => {
-  clearRoute(); clearVia(); clearStart(); hideWarn(); waitCalc = false; roughOk = false; loopStart = null; mode = 'to';
+  clearRoute(); clearVia(); clearStart(); hideWarn(); waitCalc = false; roughOk = false; loopStart = null; mode = 'to'; owSel = null;
   dest = null; if (destMarker) { destMarker.remove(); destMarker = null; }
   $('favAdd').disabled = true; $('recalcBtn').disabled = true;
   $('rem').textContent = '目的地を設定してください';
@@ -396,7 +396,7 @@ $('routeClear').onclick = () => {
   renderHud();
 };
 $('loopBtn').onclick = () => {
-  dest = null; clearVia(); loopStart = null;
+  dest = null; clearVia(); loopStart = null; owSel = null;
   if (destMarker) { destMarker.remove(); destMarker = null; }
   $('favAdd').disabled = true; $('recalcBtn').disabled = false;
   calc('loop');
@@ -444,6 +444,7 @@ function renderFavs() {
     : '<div class="small">まだ登録がありません</div>';
   $('favList').querySelectorAll('button').forEach(b =>
     twoStep(b, '削除', () => { favs.splice(Number(b.dataset.del), 1); saveFavs(); }));
+  if (typeof owFillBase === 'function') owFillBase(); // 版13：片道散歩の「帰る場所」の選択肢
 }
 $('favAdd').onclick = () => {
   if (!dest) return;
@@ -809,6 +810,8 @@ function showSummary() {
   if (cands.length > 1) h += `　案${candIdx + 1}／${cands.length}`;
   if (route.loop && route.dir) h += `　${route.dir}`;
   if (route.rr) h += '<br>組み直したルート（最初の予定の全長に合わせています）';
+  if (owSel && !route.loop) h += '<br>🚉 片道散歩：' + (owSel.dir === 'go' ? `歩いて${esc(owSel.name)}まで（帰りは電車）` : `${esc(owSel.name)}から歩いて帰る（駅に着いたら🚶を押してください）`) +
+    ` <a href="${owLink(owSel)}" target="_blank" rel="noopener">🚃 乗換を調べる</a>`;
   if (slopeMode()) h += slopeMode() === 1 ? '　坂・階段を避ける' : '　坂を選ぶ';
   if (tracks.some(t => t.k !== 'veh')) h += `<br>このルートの未踏破率 ${Math.round((route.ur ?? 1) * 100)}%`;
   if (cmpText && !route.loop) h += '<br>' + cmpText;

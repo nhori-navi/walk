@@ -433,7 +433,7 @@ function processSeg(raw, src) {
 }
 // ---------- 全部まとめて書き出す・読み込む ----------
 // 書き出す設定（値は保存している文字のまま）。東海道は起点と進み具合を組で扱う
-const BK_SET = ['walk_weight', 'walk_vib', 'walk_autofollow', 'walk_offshow', 'walk_meshshow', 'walk_cmp', 'walk_reroute', 'walk_loopdir', 'walk_theme'];
+const BK_SET = ['walk_weight', 'walk_vib', 'walk_autofollow', 'walk_offshow', 'walk_meshshow', 'walk_cmp', 'walk_reroute', 'walk_loopdir', 'walk_theme', 'walk_nightmap', 'walk_font', 'walk_owdir', 'walk_owkm'];
 const BK_TK = ['walk_tokaido_from', 'walk_tokaido_last'];
 const ymdNum = d => `${d.getFullYear()}${String(d.getMonth() + 1).padStart(2, '0')}${String(d.getDate()).padStart(2, '0')}`;
 const trackKey = t => `${t.t0}|${t.k || 'walk'}|${t.pts[0]}`;

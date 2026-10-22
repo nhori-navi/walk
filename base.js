@@ -7,6 +7,8 @@ let headingUp = false, heading = null, hx = 0, hy = 0, lastCompass = 0, lastCam 
 let walk = null, hudTimer = null;
 // 版5：現在地の精度（m）・取れた時刻、地図で選んだ出発地、位置情報のエラー
 let posAcc = null, posAt = 0, startPt = null, startMarker = null, geoErr = null;
+// 版13：片道散歩で選んだ駅（{name, dir：home＝駅から帰る／go＝駅まで行く, p：駅, base：帰る場所}）。ルートのカードに出す
+let owSel = null;
 const errs = [];
 // 端末の種類（SoraMiru と同じ考え方）：主な操作がマウスで、向きの値が一度も届いていない端末は「センサーなし」
 const PC_LIKE = !(window.matchMedia && matchMedia('(pointer: coarse)').matches);
@@ -381,7 +383,14 @@ function sunAlt(lng, lat, t) {
 }
 // {dark：画面を暗くするか, preset：地図の明るさ（day／dawn／dusk／night）}
 // 自動：日の入り（太陽 −0.83°）から日の出まで暗く。地図は、薄明かり（−6°まで）の間は夕方・明け方の色、そのあとは夜
+// 版13：夜の地図（walk_nightmap）＝夕方くらい（dusk、初め）／真っ暗な夜（night）／明るいまま（day）。暗い画面のときの地図の明るさの上限
+const nightMap = () => { const v = getLS('walk_nightmap'); return v === 'night' || v === 'day' ? v : 'dusk'; };
 function themeState(t) {
+  const s = themeRaw(t);
+  if (s.dark) { const nm = nightMap(); if (nm === 'day') s.preset = 'day'; else if (nm === 'dusk' && s.preset === 'night') s.preset = 'dusk'; }
+  return s;
+}
+function themeRaw(t) {
   const m = getLS('walk_theme') || 'auto';
   if (m === 'light') return {dark: false, preset: 'day'};
   if (m === 'dark') return {dark: true, preset: 'night'};

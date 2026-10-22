@@ -105,6 +105,16 @@ body.walking.menu #panel{display:block;top:50%;bottom:52px;left:0;right:0;width:
       <div class="row">向き：<select id="loopDir"><option value="auto">おまかせ</option><option value="cw">時計回り</option><option value="ccw">反時計回り</option></select></div>
       <div class="acts"><button id="loopBtn" class="primary">🔁 周回コースを作る</button></div>
     </div>
+    <div class="card" id="owCard">
+      <div class="ch" id="owHead">🚉 片道散歩（電車＋歩き）</div>
+      <div class="row">向き：<select id="owDir"><option value="home">駅から歩いて帰る</option><option value="go">歩いて駅まで行く</option></select></div>
+      <div class="row">歩く距離：<select id="owKm"><option>2</option><option selected>3</option><option>4</option><option>5</option><option>6</option></select></div>
+      <div class="row"><span id="owBaseLbl">帰る場所</span>：<select id="owBase"></select></div>
+      <div class="acts"><button id="owBtn" class="primary">🚉 駅を探す</button><button id="owStop" style="display:none">やめる</button></div>
+      <div id="owMsg" class="row"></div>
+      <div id="owList"></div>
+      <div class="small">まわりの駅から歩く距離に合う駅を選び、今の道の好み（未踏破・坂・遊歩道）でルートを作って、未踏破の長い順に3つ出します。電車の時刻・運賃・乗り換えは出しません（「乗換を調べる」で Google マップを開きます）。初めての地域は道のデータの取得に時間がかかります。</div>
+    </div>
     <details class="card" id="prefs">
       <summary class="ch">道の好み<span id="prefSum"></span></summary>
       <div class="row">延長：<select id="ext">
@@ -183,9 +193,11 @@ body.walking.menu #panel{display:block;top:50%;bottom:52px;left:0;right:0;width:
       <div id="helpSlot"></div>
     </div>
     <div class="card">
-      <div class="ch" id="themeHead">画面の明るさ</div>
+      <div class="ch" id="themeHead">画面の明るさ・文字の大きさ</div>
       <div class="row"><select id="themeSel"><option value="auto">自動（夜は暗く）</option><option value="light">いつも明るい</option><option value="dark">いつも暗い</option></select></div>
-      <div class="small">自動は、今いる場所の日の入りから日の出まで、画面と地図を暗くします（地図は夕方・明け方の色をはさんで夜の表示になります）。<br>地図と下の境目にある横棒（つまみ）を上下に動かすと、地図の広さを変えられます。2回タップで半分に戻ります（スマホだけ）。</div>
+      <div class="row">夜の地図：<select id="nightSel"><option value="dusk">夕方くらい</option><option value="night">真っ暗な夜</option><option value="day">明るいまま</option></select></div>
+      <div class="row">文字の大きさ：<select id="fontSel"><option value="1">標準</option><option value="1.15">大きめ</option><option value="1.3">特大</option></select></div>
+      <div class="small">自動は、今いる場所の日の入りから日の出まで画面を暗くします。夜の地図は「夕方くらい」なら道や建物の形が見える明るさまでにとどめます。「真っ暗な夜」は街の明かりが映える表示ですが、道は見えにくくなります。文字の大きさは、タブの中身・歩行中の左上の案内・下の帯に効きます。<br>地図と下の境目にある横棒（つまみ）を上下に動かすと、地図の広さを変えられます。2回タップで半分に戻ります（スマホだけ）。</div>
     </div>
     <div class="card">
       <div class="ch" id="viewHead">地図に出すもの</div>
@@ -222,6 +234,7 @@ body.walking.menu #panel{display:block;top:50%;bottom:52px;left:0;right:0;width:
     ・住所検索：検索した文字だけ → 国土地理院<br>
     ・比較ルート（入にしたときだけ）：出発地・経由地・目的地の座標 → Mapbox 社<br>
     ・旅の地図：市区町村の境目と線路のデータは、このサイトから読み込みます（外のサービスには何も送りません）<br>
+    ・片道散歩：帰る場所（出発する場所）のまわり約2km四方のマスを中心に、東西南北おおよそ7kmの範囲 → OpenStreetMap の公開サーバー（駅のデータ）。「乗換を調べる」を押したときだけ、駅の位置（と、駅まで行く向きのときは約500m単位に丸めた帰る場所）→ Google 社<br>
     ・東海道の地図：旧東海道の道筋（初めの1回だけ。あなたの場所は送りません）→ OpenStreetMap の公開サーバー。「ストリートビューで見る」「Googleマップで見る」を押したときだけ、東海道の上の今の位置（あなたの現在地ではありません）→ Google 社
     </div>
   </details>
@@ -238,16 +251,17 @@ window.addEventListener('error', e => {
   if (el) el.textContent = el.textContent ? el.textContent + ' ／ ' + m : m;
 }, true);
 </script>
-<script src="config.js?v=12"></script>
-<script src="base.js?v=12"></script>
-<script src="road.js?v=12"></script>
-<script src="poi.js?v=12"></script>
-<script src="walk.js?v=12"></script>
-<script src="play.js?v=12"></script>
-<script src="tokaido.js?v=12"></script>
-<script src="tabi.js?v=12"></script>
-<script src="app.js?v=12"></script>
-<script src="ui.js?v=12"></script>
-<script src="help.js?v=12"></script>
+<script src="config.js?v=13"></script>
+<script src="base.js?v=13"></script>
+<script src="road.js?v=13"></script>
+<script src="poi.js?v=13"></script>
+<script src="walk.js?v=13"></script>
+<script src="play.js?v=13"></script>
+<script src="tokaido.js?v=13"></script>
+<script src="tabi.js?v=13"></script>
+<script src="app.js?v=13"></script>
+<script src="oneway.js?v=13"></script>
+<script src="ui.js?v=13"></script>
+<script src="help.js?v=13"></script>
 </body>
 </html>

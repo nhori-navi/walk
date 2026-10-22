@@ -1,4 +1,4 @@
-// MichiMiru：画面の骨組み（版9。版12で境目のつまみ・画面の明るさ・歩行中の画面）。下のタブ、地図の丸いボタン、ルートの結果のカード、道の好みの「押して選ぶ並び」、見た目
+// MichiMiru：画面の骨組み（版9。版12で境目のつまみ・画面の明るさ・歩行中の画面。版13で夜の見やすさ・文字の大きさ・片道散歩の並び）。下のタブ、地図の丸いボタン、ルートの結果のカード、道の好みの「押して選ぶ並び」、見た目
 // app.js のあと・help.js の前に読む。部品の id と動きは変えず、見せ方だけを変える
 (function () {
   const st = document.createElement('style');
@@ -103,63 +103,81 @@ body.walking #map{bottom:64px}
 #hud .turn .ttx{line-height:1.25}
 #hud .turn .ttx b{display:block;font-size:24px}
 #hud .turn.now{background:#c0392b;color:#fff}
-/* 版12：暗い画面 */
-body.dark{--ink:#e3e8e5;--line:#3a4540;--gl:#1d3a27;background:#121614;color:var(--ink);color-scheme:dark}
-body.dark #panel{background:#121614;border-color:#2a332e}
-body.dark .card,body.dark details{background:#1b221f;border-color:#2c3631;box-shadow:none}
-body.dark .ch,body.dark summary{color:#8fd19e}
-body.dark #panel button,body.dark #panel input[type=number],body.dark #panel input:not([type]),body.dark #search,body.dark select{background:#232b27;color:var(--ink);border-color:var(--line)}
-body.dark #panel button.primary{background:#1e7e34;border-color:#2e9e4c;color:#fff}
-body.dark #panel button.danger{color:#ff8a7a;border-color:#7a3a35}
-body.dark #panel .chips button.on{background:#1e7e34;border-color:#2e9e4c;color:#fff}
-body.dark .tg label{background:#232b27;border-color:var(--line)}
-body.dark .tg label:has(input:checked){background:var(--gl);border-color:#2e9e4c;color:#8fd19e}
-body.dark .small{color:#9aa8a0}
-body.dark .row{color:#cfd8d3}
-body.dark #sub{color:#b8c4bd}
-body.dark #result{color:#8ab4f8}
-body.dark a{color:#8ab4f8}
-body.dark .hit{background:#1b221f;border-color:#2c3631}
-body.dark .lst{border-color:#2c3631}
-body.dark #prof{filter:invert(.88) hue-rotate(180deg);border-color:#2c3631}
-body.dark [style*="color:#333"]{color:#cfd8d3!important}
-body.dark [style*="color:#1e7e34"]{color:#6fcf87!important}
-body.dark [style*="background:#e8ece9"]{background:#2c3631!important}
-body.dark .fav,body.dark #warn,body.dark #impBox,body.dark #favForm,body.dark #routeWhy{background:#2e2818;border-color:#8a6d1a;color:#f3e3b0}
-body.dark .ask{background:#341c1a;border-color:#7a3a35;color:#f5c6c0}
-body.dark #tabbar{background:#1a201d;border-color:#2a332e}
-body.dark #tabbar .tb{color:#9aa8a0}
-body.dark #tabbar .tb.on{color:#6fcf87}
-body.dark #tabbar .tb.on::after{background:#6fcf87}
-body.dark #tabbar .fab{border-color:#1a201d}
-body.dark #tab{background:#1a201d;border-color:#2a332e}
-body.dark #tab button{background:#232b27;color:var(--ink);border-color:var(--line)}
+/* 版13：片道散歩の候補 */
+.owItem{border:1px solid #e1e8e3;border-radius:10px;padding:6px 9px;margin:6px 0;background:#fbfdfb;font-size:14px;line-height:1.6}
+.owItem .acts{margin:4px 0 0}
+.owT{font-size:14px;color:#1f6fd1;margin-left:4px}
+/* 版13：文字の大きさ（--fz＝1／1.15／1.3）。タブの中身・左上の案内・吹き出しは丸ごと拡大、下の帯とタブは文字だけ */
+.pane,#warn,#status,#err,#hud,#tip{zoom:var(--fz,1)}
+#tab button{font-size:min(16px,calc(14px * var(--fz,1)));white-space:normal}
+#tabbar .tb{font-size:min(15px,calc(12px * var(--fz,1)))}
+#mbar{font-size:calc(14px * var(--fz,1))}
+.mapboxgl-popup-content{font-size:calc(13px * var(--fz,1))}
+.pmk{font-size:calc(12px * var(--fz,1))}
+#helpBox{font-size:calc(15px * var(--fz,1))}
+/* 版12：暗い画面（版13：背景を少し明るく、文字はくっきり〔コントラスト比7以上〕） */
+body.dark{--ink:#f1f5f2;--line:#4a5852;--gl:#1f4a2c;background:#1e2522;color:var(--ink);color-scheme:dark}
+body.dark #panel{background:#1e2522;border-color:#3a4641}
+body.dark .card,body.dark details{background:#28322e;border-color:#3d4a45;box-shadow:none}
+body.dark .ch,body.dark summary{color:#a8e0b4}
+body.dark #prefSum{color:#c9d3cd}
+body.dark #panel button,body.dark #panel input[type=number],body.dark #panel input:not([type]),body.dark #search,body.dark select{background:#34403b;color:var(--ink);border-color:var(--line)}
+body.dark #panel button.primary{background:#1e7e34;border-color:#3aa85a;color:#fff}
+body.dark #panel button.danger{color:#ffb3a8;border-color:#8a4a44}
+body.dark #panel .chips button.on{background:#1e7e34;border-color:#3aa85a;color:#fff}
+body.dark .tg label{background:#34403b;border-color:var(--line)}
+body.dark .tg label:has(input:checked){background:var(--gl);border-color:#3aa85a;color:#c4f0cf}
+body.dark .small{color:#c9d3cd}
+body.dark .row{color:#e6ece8}
+body.dark #sub{color:#dbe3de}
+body.dark #result{color:#a9c8ff}
+body.dark a,body.dark .owT{color:#a9c8ff}
+body.dark .hit,body.dark .owItem{background:#28322e;border-color:#3d4a45}
+body.dark .lst{border-color:#3d4a45}
+body.dark #prof{filter:invert(.88) hue-rotate(180deg);border-color:#3d4a45}
+body.dark [style*="color:#333"]{color:#e6ece8!important}
+body.dark [style*="color:#1e7e34"]{color:#8fe3a3!important}
+body.dark [style*="color:#c0392b"],body.dark [style*="color:#c00"]{color:#ffb3a8!important}
+body.dark [style*="background:#e8ece9"]{background:#3d4a45!important}
+body.dark .fav,body.dark #warn,body.dark #impBox,body.dark #favForm,body.dark #routeWhy{background:#3a321c;border-color:#a8862a;color:#f7ebc4}
+body.dark .ask{background:#45231f;border-color:#8a4a44;color:#ffd6cf}
+body.dark #tabbar{background:#242c29;border-color:#3a4641}
+body.dark #tabbar .tb{color:#cdd6d1}
+body.dark #tabbar .tb .ic{filter:none;opacity:.9}
+body.dark #tabbar .tb.on{color:#8fe3a3}
+body.dark #tabbar .tb.on::after{background:#8fe3a3}
+body.dark #tabbar .fab{border-color:#242c29}
+body.dark #tab{background:#242c29;border-color:#3a4641}
+body.dark #tab button{background:#34403b;color:var(--ink);border-color:var(--line)}
 body.dark #tab #endBtn{background:#c0392b;border-color:#c0392b;color:#fff}
-body.dark #hud{background:rgba(27,34,31,.92);color:#e3e8e5}
-body.dark #hud .turn{background:#4a1f1b;color:#ff9a8c}
+body.dark #hud{background:rgba(36,44,41,.95);color:#f6f8f7;box-shadow:0 1px 6px rgba(0,0,0,.6)}
+body.dark #hud .turn{background:#5a2620;color:#ffc2b8}
 body.dark #hud .turn.now{background:#c0392b;color:#fff}
-body.dark #hud [style*="color:#555"]{color:#b8c4bd!important}
-body.dark #hud [style*="color:#1f6fd1"]{color:#8ab4f8!important}
-body.dark #hud [style*="background:#fdecea"]{background:#4a1f1b!important;color:#ff9a8c!important}
-body.dark #mapBtns button{background:#232b27;color:#8ab4f8}
+body.dark #hud [style*="color:#555"]{color:#d4ddd8!important}
+body.dark #hud [style*="color:#1f6fd1"]{color:#a9c8ff!important}
+body.dark #hud [style*="color:#b9770e"]{color:#ffd27a!important}
+body.dark #hud [style*="background:#fdecea"]{background:#5a2620!important;color:#ffc2b8!important}
+body.dark #mapBtns button{background:#34403b;color:#a9c8ff;box-shadow:0 1px 5px rgba(0,0,0,.6)}
 body.dark #mapBtns button.on{background:#1f6fd1;color:#fff}
-body.dark #grip::before{background:#9aa8a0;box-shadow:0 0 0 3px rgba(27,34,31,.9),0 1px 4px rgba(0,0,0,.5)}
-body.dark #mbar{background:rgba(40,36,25,.9);color:#eee;border-color:#8a6d1a}
-body.dark #mbar button{color:#eee;border-color:#555}
-body.dark #mbMore{border-color:#5a4a20}
-body.dark .mapboxgl-popup-content,body.dark .meshPop .mapboxgl-popup-content{background:rgba(27,34,31,.85);color:#e3e8e5}
-body.dark .mapboxgl-popup-anchor-bottom .mapboxgl-popup-tip{border-top-color:rgba(27,34,31,.85)!important}
-body.dark .mapboxgl-popup-anchor-top .mapboxgl-popup-tip{border-bottom-color:rgba(27,34,31,.85)!important}
-body.dark .mapboxgl-popup-close-button{color:#e3e8e5}
-body.dark .pmk{background:#1b221f;color:#e3e8e5;border-color:#9aa8a0}
-body.dark #tip{background:#2e2818;color:#f3e3b0;border-color:#8a6d1a}
-body.dark #tip b{color:#ffd54f}
-body.dark #tipX{color:#f3e3b0}
-body.dark #helpBox{background:#121614;color:var(--ink)}
-body.dark #helpBox details{background:none;border-color:#2c3631}
-body.dark #helpBox summary{color:#8fd19e}
-body.dark #helpBox details[open] summary{color:#ff8a7a}
-body.dark .qb,body.dark #panel .qb{background:#232b27;color:#6fcf87;border-color:#6fcf87}
+body.dark #grip::before{background:#c9d3cd;box-shadow:0 0 0 3px rgba(36,44,41,.9),0 1px 4px rgba(0,0,0,.5)}
+body.dark #mbar{background:rgba(48,43,30,.94);color:#f6f8f7;border-color:#a8862a}
+body.dark #mbar button{color:#f6f8f7;border-color:#6a6a6a}
+body.dark #mbMore{border-color:#6a5a28}
+body.dark .mapboxgl-popup-content,body.dark .meshPop .mapboxgl-popup-content{background:rgba(36,44,41,.92);color:#f1f5f2}
+body.dark .mapboxgl-popup-anchor-bottom .mapboxgl-popup-tip{border-top-color:rgba(36,44,41,.92)!important}
+body.dark .mapboxgl-popup-anchor-top .mapboxgl-popup-tip{border-bottom-color:rgba(36,44,41,.92)!important}
+body.dark .mapboxgl-popup-close-button{color:#f1f5f2}
+body.dark .pmk{background:#28322e;color:#f1f5f2;border-color:#c9d3cd}
+body.dark #tip{background:#3a321c;color:#f7ebc4;border-color:#a8862a}
+body.dark #tip b{color:#ffe082}
+body.dark #tipX{color:#f7ebc4}
+body.dark #helpBox{background:#1e2522;color:var(--ink)}
+body.dark #helpBox details{background:none;border-color:#3d4a45}
+body.dark #helpBox summary{color:#a8e0b4}
+body.dark #helpBox details[open] summary{color:#ffb3a8}
+body.dark .qb,body.dark #panel .qb{background:#34403b;color:#8fe3a3;border-color:#8fe3a3}
+/* 版13：夜は現在地の点を大きく */
+body.dark .me .dot{left:5px;top:5px;width:24px;height:24px;border-width:3px;box-shadow:0 0 0 3px rgba(30,144,255,.35),0 0 8px rgba(0,0,0,.7)}
 `;
   document.head.appendChild(st);
 
@@ -225,6 +243,8 @@ body.dark .qb,body.dark #panel .qb{background:#232b27;color:#6fcf87;border-color
   chips('loopKm', ['1km', '2km', '3km', '5km']);
   chips('loopDir', ['おまかせ', '時計回り', '反時計回り']);
   chips('rrMode', ['自動', '聞いてから', 'しない']);
+  chips('owDir', ['駅から歩いて帰る', '歩いて駅まで行く']);
+  chips('owKm', ['2km', '3km', '4km', '5km', '6km']);
   function syncChips() { chipSets.forEach(([sel, w]) => w.querySelectorAll('button').forEach(b => b.classList.toggle('on', b.dataset.v === sel.value))); }
   window.chipOf = id => { const s = chipSets.find(([sel]) => sel.id === id); return s ? s[1] : $(id); };
   // 道の好みの開け閉めを覚える（初めは開いておく）
@@ -280,21 +300,48 @@ body.dark .qb,body.dark #panel .qb{background:#232b27;color:#6fcf87;border-color
   grip.addEventListener('dblclick', e => e.preventDefault());
 
   // ---------- 版12：画面の明るさ（自動／いつも明るい／いつも暗い）。地図は Mapbox の明るさの切り替え（夕方・明け方・夜） ----------
+  // 版13：夜の地図の明るさの上限（夕方くらい〔初め〕／真っ暗な夜／明るいまま）。暗い画面のときはルート・歩いた道の線を太く・濃く
   $('themeSel').value = getLS('walk_theme') || 'auto';
   chips('themeSel', ['自動（夜は暗く）', 'いつも明るい', 'いつも暗い']);
-  let presetNow = themeState().preset;
+  $('nightSel').value = nightMap();
+  chips('nightSel', ['夕方くらい', '真っ暗な夜', '明るいまま']);
+  let presetNow = themeState().preset, linesDark = null;
+  function nightLines(d) {
+    if (linesDark === d || !map.getLayer || !map.getLayer('route')) return;
+    linesDark = d;
+    const set = (id, k, v) => { try { map.setPaintProperty(id, k, v); } catch (e) {} };
+    set('route', 'line-width', d ? 7 : 5);
+    set('routeCasing', 'line-width', d ? 12 : 9);
+    set('walked', 'line-opacity', d ? 0.85 : 0.55);
+    set('walked', 'line-width', d ? ['interpolate', ['linear'], ['zoom'], 12, 4, 17, 12] : ['interpolate', ['linear'], ['zoom'], 12, 3, 17, 10]);
+    set('meshRem', 'line-width', d ? 5 : 4);
+  }
   function applyTheme() {
     const t = themeState();
     document.body.classList.toggle('dark', t.dark);
     if (t.preset !== presetNow) {
       try { map.setConfigProperty('basemap', 'lightPreset', t.preset); presetNow = t.preset; } catch (e) {}  // 地図の準備がまだなら、次の判定でやり直す
     }
+    nightLines(t.dark);
   }
   window.applyTheme = applyTheme;
   $('themeSel').addEventListener('change', () => { lsSet('walk_theme', $('themeSel').value); applyTheme(); syncChips(); });
+  $('nightSel').addEventListener('change', () => { lsSet('walk_nightmap', $('nightSel').value); applyTheme(); syncChips(); });
   map.on('style.load', () => { presetNow = ''; applyTheme(); });
+  map.on('load', () => { linesDark = null; applyTheme(); });
   applyTheme();
   setInterval(applyTheme, 60000);
+
+  // ---------- 版13：文字の大きさ（標準／大きめ／特大）。CSS の --fz で拡大する ----------
+  const FZ = ['1', '1.15', '1.3'];
+  $('fontSel').value = FZ.includes(getLS('walk_font')) ? getLS('walk_font') : '1';
+  chips('fontSel', ['標準', '大きめ', '特大']);
+  function applyFont() {
+    document.documentElement.style.setProperty('--fz', $('fontSel').value);
+    if (route) setTimeout(() => drawProf(route.a), 50);
+  }
+  $('fontSel').addEventListener('change', () => { lsSet('walk_font', $('fontSel').value); applyFont(); syncChips(); });
+  applyFont();
 
   // ---------- 版12：歩行中の「終了」は2回押し（3秒以内にもう一度で終わる。ポケットの中などでの押し間違いを防ぐ） ----------
   let endArm = 0, endTm = 0;
