@@ -110,6 +110,7 @@ body.walking #map{bottom:64px}
 #panel .trList button{text-align:left;min-height:40px;line-height:1.4;padding:5px 10px}
 #panel .trList button.on{background:var(--gl);border-color:var(--g);color:var(--g);font-weight:bold}
 .trList .sm{display:block;font-size:13px;font-weight:normal;color:#5d6b63}
+.trList .ln{font-size:12px;font-weight:normal;color:#5d6b63;margin-left:6px}
 .trT{font-size:14px;color:#1f6fd1;margin-left:4px}
 /* 版13：文字の大きさ（--fz＝1／1.15／1.3）。タブの中身・左上の案内・吹き出しは丸ごと拡大、下の帯とタブは文字だけ */
 .pane,#warn,#status,#err,#hud,#tip{zoom:var(--fz,1)}
@@ -137,7 +138,7 @@ body.dark #sub{color:#dbe3de}
 body.dark #result{color:#a9c8ff}
 body.dark a,body.dark .trT{color:#a9c8ff}
 body.dark #panel .trList button.on{background:var(--gl);border-color:#3aa85a;color:#c4f0cf}
-body.dark .trList .sm{color:#c9d3cd}
+body.dark .trList .sm,body.dark .trList .ln{color:#c9d3cd}
 body.dark .hit{background:#28322e;border-color:#3d4a45}
 body.dark .lst{border-color:#3d4a45}
 body.dark #prof{filter:invert(.88) hue-rotate(180deg);border-color:#3d4a45}

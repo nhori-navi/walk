@@ -365,6 +365,7 @@ function setDest(p) {
   if (destMarker) destMarker.remove();
   destMarker = new mapboxgl.Marker({color: '#c0392b'}).setLngLat(p).addTo(map);
   $('recalcBtn').disabled = false; $('favAdd').disabled = false;
+  if (typeof trPrep === 'function') trPrep(); // 版15：電車をはさむときのために、駅の準備を裏で始める
   calc('to');
 }
 function addVia(p) {

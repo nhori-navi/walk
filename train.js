@@ -1,4 +1,4 @@
-// MichiMiru：電車をはさむルート（版14）。現在地 →（歩く）→ ①乗る駅 →（電車）→ ②降りる駅 →（歩く）→ 目的地
+// MichiMiru：電車をはさむルート（版14。版15で駅の一覧をサイトに置いた）。現在地 →（歩く）→ ①乗る駅 →（電車）→ ②降りる駅 →（歩く）→ 目的地
 // app.js のあと・ui.js の前に読む。電車の時刻・運賃・乗り換えは出さない（Google マップの経路を開く）
 // 画面を消している間はページが止まるので、画面をつけたときに降りる駅の300m以内なら、聞かずに②のルートへ切り替える
 const TRIP_LIFE = 6 * 3600000, TR_NEAR = 300, TR_N = 3;
@@ -10,14 +10,60 @@ const trLL = p => p[1].toFixed(5) + ',' + p[0].toFixed(5);
 const trLink = (a, b) => `https://www.google.com/maps/dir/?api=1&origin=${trLL(a.p)}&destination=${trLL(b.p)}&travelmode=transit`;
 const trWaitIdle = async () => { while (busy) await new Promise(r => setTimeout(r, 300)); };
 
-// ---------- 駅のデータ（OpenStreetMap）。約2km四方のマスごとに、まわり約7kmの駅をまとめて取り、端末に30日保存 ----------
+// ---------- 駅のデータ ----------
+// 版15：全国の駅の一覧（国土数値情報〔鉄道〕N02-25 を加工した stations.json）をこのサイトから初回だけ読み込み、端末に保存。
+// 読めないときだけ、今までどおり OpenStreetMap（Overpass）に聞く（その問い合わせは順番待ちの先頭に割り込む）
+const ST_VER = 'N02-25', ST_GRID = 0.05;
+let stAll = null, stIdx = null, stLoading = null, stFailAt = 0;
+function stBuild(j) {
+  let x = 0, y = 0; const all = [], idx = new Map();
+  j.s.forEach(r => {
+    x += r[1]; y += r[2];
+    const ln = r.slice(3).map(i => j.l[i]);
+    const s = [r[0], x / j.q, y / j.q, ln.slice(0, 3).join('・') + (ln.length > 3 ? ' ほか' : '')]; // 路線は3つまで
+    all.push(s);
+    const k = Math.floor(s[1] / ST_GRID) + '_' + Math.floor(s[2] / ST_GRID);
+    let l = idx.get(k); if (!l) { l = []; idx.set(k, l); } l.push(s);
+  });
+  stAll = all; stIdx = idx;
+}
+function stLoad() {
+  if (stAll) return Promise.resolve(true);
+  if (stLoading) return stLoading;
+  if (Date.now() - stFailAt < 60000) return Promise.resolve(false);
+  stLoading = (async () => {
+    try {
+      let j = null;
+      try { j = await cacheGet('stations_' + ST_VER); } catch (e) {}
+      if (!j) {
+        const r = await fetch('stations.json?v=' + ST_VER);
+        if (!r.ok) throw new Error('HTTP ' + r.status);
+        j = await r.json();
+        try { await cachePut('stations_' + ST_VER, j); } catch (e) {}
+      }
+      stBuild(j); return true;
+    } catch (e) { stFailAt = Date.now(); return false; }
+    finally { stLoading = null; }
+  })();
+  return stLoading;
+}
+// p のまわり（約7km）の駅 [名前, 経度, 緯度, 路線]
 async function trStations(p) {
+  if (await stLoad()) {
+    const gx = Math.floor(p[0] / ST_GRID), gy = Math.floor(p[1] / ST_GRID), out = [];
+    for (let dx = -2; dx <= 2; dx++) for (let dy = -2; dy <= 2; dy++) { const l = stIdx.get((gx + dx) + '_' + (gy + dy)); if (l) out.push(...l); }
+    return out;
+  }
+  return trStationsOsm(p);
+}
+// 予備：OpenStreetMap。約2km四方のマスごとに、まわり約7kmの駅をまとめて取り、端末に30日保存
+async function trStationsOsm(p) {
   const tx = Math.floor(p[0] / TILE), ty = Math.floor(p[1] / TILE), key = 'st:' + tileKey(tx, ty);
   try { const c = await cacheGet(key); if (c && Date.now() - c.t < CACHE_DAYS * 864e5) return c.list; } catch (e) {}
   const d = 0.07, box = bboxStr({s: ty * TILE - d, w: tx * TILE - d, n: (ty + 1) * TILE + d, e: (tx + 1) * TILE + d});
   let els;
   try {
-    els = await ovpQueue(`[out:json][timeout:40];(nwr["railway"~"^(station|halt)$"](${box});nwr["public_transport"="station"](${box}););out tags center;`, OVP_LIMIT);
+    els = await ovpQueue(`[out:json][timeout:40];(nwr["railway"~"^(station|halt)$"](${box});nwr["public_transport"="station"](${box}););out tags center;`, OVP_LIMIT, true);
   } catch (e) { throw new Error('駅の' + e.message); }
   const RAIL = ['train', 'subway', 'light_rail', 'monorail', 'tram'];
   const list = [];
@@ -34,23 +80,31 @@ async function trStations(p) {
     if (same) { if (rail && !same[4]) { same[1] = lon; same[2] = lat; same[4] = 1; } return; }
     list.push([nm, lon, lat, k2, rail ? 1 : 0]);
   });
-  const out = list.map(s => [s[0], Number(s[1].toFixed(6)), Number(s[2].toFixed(6))]);
+  const out = list.map(s => [s[0], Number(s[1].toFixed(6)), Number(s[2].toFixed(6)), '']);
   try { await cachePut(key, {t: Date.now(), list: out}); } catch (e) {}
   return out;
 }
+// 目的地を決めたときに、裏で駅の準備を始めておく（一覧が読めないときは、出発地と目的地のまわりを OpenStreetMap に先に聞く）
+function trPrep() {
+  stLoad().then(ok => {
+    if (ok || !dest) return;
+    const o = origin();
+    [o, dest].filter(Boolean).forEach(p => trStationsOsm(p).catch(() => {}));
+  });
+}
 // 近い順に n 駅（直線 maxD まで）
 function trNearest(list, p, n, maxD) {
-  return list.map(([name, lon, lat]) => ({name: stName(name), p: [lon, lat], d: distM(p, [lon, lat])}))
+  return list.map(([name, lon, lat, ln]) => ({name: stName(name), p: [lon, lat], d: distM(p, [lon, lat]), ln: ln || ''}))
     .filter(s => s.d <= maxD).sort((a, b) => a.d - b.d).slice(0, n);
 }
 // 降りてから L m 歩く駅：直線で L の0.5〜1.05倍の駅を8方位で1つずつ（最大6駅）選び、目的地までのルートで未踏破の長い順に3つ
 async function trFar(list, goal, L, run) {
   const ideal = L / 1.2, lo = L * 0.5, hi = L * 1.05, sec = new Map();
-  list.forEach(([name, lon, lat]) => {
+  list.forEach(([name, lon, lat, ln]) => {
     const p = [lon, lat], d = distM(goal, p);
     if (d < lo || d > hi) return;
     const b = (bearing(goal, p) + 360) % 360, k = Math.floor(((b + 22.5) % 360) / 45), err = Math.abs(d - ideal), c = sec.get(k);
-    if (!c || err < c.err) sec.set(k, {name: stName(name), p, d, b, err});
+    if (!c || err < c.err) sec.set(k, {name: stName(name), p, d, b, err, ln: ln || ''});
   });
   const picks = [...sec.values()].sort((a, b) => a.err - b.err).slice(0, 6).sort((a, b) => a.b - b.b);
   const res = [];
@@ -78,7 +132,7 @@ async function trFar(list, goal, L, run) {
 const trMsg = h => { $('trMsg').innerHTML = h; };
 function trRender(id, list, key) {
   const hasRec = tracks.some(t => t.k !== 'veh');
-  $(id).innerHTML = list.length ? list.map((s, i) => `<button type="button" data-i="${i}">🚉 ${esc(s.name)}<span class="sm">${s.len != null
+  $(id).innerHTML = list.length ? list.map((s, i) => `<button type="button" data-i="${i}">🚉 ${esc(s.name)}${s.ln ? `<span class="ln">${esc(s.ln)}</span>` : ''}<span class="sm">${s.len != null
     ? `歩いて ${fmtDist(s.len)}・約${walkMin(s.len)}分${hasRec ? `・未踏破 ${fmtDist(s.un)}（${Math.round(s.ratio * 100)}%）` : ''}`
     : `直線 ${fmtDist(s.d)}`}</span></button>`).join('') : '<div class="small">見つかりませんでした</div>';
   $(id).querySelectorAll('button').forEach(b => b.onclick = () => { trSel[key] = list[Number(b.dataset.i)]; trMark(); });

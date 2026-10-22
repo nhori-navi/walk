@@ -235,11 +235,11 @@ body.walking.menu #panel{display:block;top:50%;bottom:52px;left:0;right:0;width:
     ・住所検索：検索した文字だけ → 国土地理院<br>
     ・比較ルート（入にしたときだけ）：出発地・経由地・目的地の座標 → Mapbox 社<br>
     ・旅の地図：市区町村の境目と線路のデータは、このサイトから読み込みます（外のサービスには何も送りません）<br>
-    ・電車をはさむ：出発地と目的地それぞれのまわり約2km四方のマスを中心に、東西南北おおよそ7kmの範囲 → OpenStreetMap の公開サーバー（駅のデータ）。「乗換を調べる」を押したときだけ、乗る駅と降りる駅の位置 → Google 社<br>
+    ・電車をはさむ：駅の一覧はこのサイトから読み込みます（外のサービスには何も送りません。読み込めないときだけ、出発地と目的地のまわり約16km四方の範囲 → OpenStreetMap の公開サーバー）。「乗換を調べる」を押したときだけ、乗る駅と降りる駅の位置 → Google 社<br>
     ・東海道の地図：旧東海道の道筋（初めの1回だけ。あなたの場所は送りません）→ OpenStreetMap の公開サーバー。「ストリートビューで見る」「Googleマップで見る」を押したときだけ、東海道の上の今の位置（あなたの現在地ではありません）→ Google 社
     </div>
   </details>
-  <div class="small">道路・名称検索データ © OpenStreetMap contributors／標高・住所検索：国土地理院／東海道の宿場間の距離：川口市の資料／市区町村の境目：国土数値情報（行政区域）国土交通省を加工／線路：地球地図日本（国土地理院）を加工<br>MichiMiru　<span id="ver"></span></div>
+  <div class="small">道路・名称検索データ © OpenStreetMap contributors／標高・住所検索：国土地理院／東海道の宿場間の距離：川口市の資料／市区町村の境目：国土数値情報（行政区域）国土交通省を加工／線路：地球地図日本（国土地理院）を加工／駅：国土数値情報（鉄道）国土交通省を加工<br>MichiMiru　<span id="ver"></span></div>
 
   </section>
   <div id="oldBtns" style="display:none"><button id="followBtn">追従：ON</button><button id="headBtn">向き：北が上</button></div>
@@ -252,17 +252,17 @@ window.addEventListener('error', e => {
   if (el) el.textContent = el.textContent ? el.textContent + ' ／ ' + m : m;
 }, true);
 </script>
-<script src="config.js?v=14"></script>
-<script src="base.js?v=14"></script>
-<script src="road.js?v=14"></script>
-<script src="poi.js?v=14"></script>
-<script src="walk.js?v=14"></script>
-<script src="play.js?v=14"></script>
-<script src="tokaido.js?v=14"></script>
-<script src="tabi.js?v=14"></script>
-<script src="app.js?v=14"></script>
-<script src="train.js?v=14"></script>
-<script src="ui.js?v=14"></script>
-<script src="help.js?v=14"></script>
+<script src="config.js?v=15"></script>
+<script src="base.js?v=15"></script>
+<script src="road.js?v=15"></script>
+<script src="poi.js?v=15"></script>
+<script src="walk.js?v=15"></script>
+<script src="play.js?v=15"></script>
+<script src="tokaido.js?v=15"></script>
+<script src="tabi.js?v=15"></script>
+<script src="app.js?v=15"></script>
+<script src="train.js?v=15"></script>
+<script src="ui.js?v=15"></script>
+<script src="help.js?v=15"></script>
 </body>
 </html>

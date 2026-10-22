@@ -12,8 +12,8 @@ let tileMeta = loadJSON('walk_tile_meta', '{}'); // {マス: [取得した時刻
 const saveTileMeta = () => lsSet('walk_tile_meta', JSON.stringify(tileMeta));
 // 問い合わせの順番待ち（同時に2つまで）。道も神社・寺・公園も同じ列に並ぶ
 const ovpQ = []; let ovpRun = 0;
-function ovpQueue(q, limit) {
-  return new Promise((res, rej) => { ovpQ.push({q, limit, res, rej}); ovpPump(); });
+function ovpQueue(q, limit, front) { // 版15：front＝順番待ちの先頭に割り込む（駅の問い合わせ）
+  return new Promise((res, rej) => { const j = {q, limit, res, rej}; if (front) ovpQ.unshift(j); else ovpQ.push(j); ovpPump(); });
 }
 function ovpPump() {
   while (ovpRun < 2 && ovpQ.length) {
