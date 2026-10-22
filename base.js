@@ -7,8 +7,8 @@ let headingUp = false, heading = null, hx = 0, hy = 0, lastCompass = 0, lastCam 
 let walk = null, hudTimer = null;
 // 版5：現在地の精度（m）・取れた時刻、地図で選んだ出発地、位置情報のエラー
 let posAcc = null, posAt = 0, startPt = null, startMarker = null, geoErr = null;
-// 版13：片道散歩で選んだ駅（{name, dir：home＝駅から帰る／go＝駅まで行く, p：駅, base：帰る場所}）。ルートのカードに出す
-let owSel = null;
+// 版14：電車をはさむルート（{dest：最終の目的地, destName, a：乗る駅{name,p}, b：降りる駅{name,p}, leg：1＝乗る駅まで／2＝降りる駅から, km, t：作った時刻}）。walk_trip に6時間覚える
+let trip = null;
 const errs = [];
 // 端末の種類（SoraMiru と同じ考え方）：主な操作がマウスで、向きの値が一度も届いていない端末は「センサーなし」
 const PC_LIKE = !(window.matchMedia && matchMedia('(pointer: coarse)').matches);

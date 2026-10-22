@@ -244,6 +244,7 @@ function onPos(p) {
   if (walk) walkStep(c);
   if (!(startPt && !walk)) cam();
   updateRemain();
+  if (typeof tripOnPos === 'function') tripOnPos(); // 版14：降りる駅に着いたら、目的地までのルートに切り替える
 }
 document.addEventListener('visibilitychange', () => {
   if (document.visibilityState === 'visible' && 'geolocation' in navigator)
@@ -360,7 +361,7 @@ function drawVias() {
 }
 function clearVia() { vias = []; drawVias(); }
 function setDest(p) {
-  dest = p; clearVia(); owSel = null; // 版13：片道散歩で選んだ駅は、目的地を選び直したら外す
+  dest = p; clearVia(); if (typeof clearTrip === 'function') clearTrip(); // 版14：目的地を選び直したら、電車をはさむルートは外す
   if (destMarker) destMarker.remove();
   destMarker = new mapboxgl.Marker({color: '#c0392b'}).setLngLat(p).addTo(map);
   $('recalcBtn').disabled = false; $('favAdd').disabled = false;
@@ -388,7 +389,7 @@ $('poiShow').onchange = () => {
   drawPois();
 };
 $('routeClear').onclick = () => {
-  clearRoute(); clearVia(); clearStart(); hideWarn(); waitCalc = false; roughOk = false; loopStart = null; mode = 'to'; owSel = null;
+  clearRoute(); clearVia(); clearStart(); hideWarn(); waitCalc = false; roughOk = false; loopStart = null; mode = 'to'; clearTrip();
   dest = null; if (destMarker) { destMarker.remove(); destMarker = null; }
   $('favAdd').disabled = true; $('recalcBtn').disabled = true;
   $('rem').textContent = '目的地を設定してください';
@@ -396,7 +397,7 @@ $('routeClear').onclick = () => {
   renderHud();
 };
 $('loopBtn').onclick = () => {
-  dest = null; clearVia(); loopStart = null; owSel = null;
+  dest = null; clearVia(); loopStart = null; clearTrip();
   if (destMarker) { destMarker.remove(); destMarker = null; }
   $('favAdd').disabled = true; $('recalcBtn').disabled = false;
   calc('loop');
@@ -444,7 +445,6 @@ function renderFavs() {
     : '<div class="small">まだ登録がありません</div>';
   $('favList').querySelectorAll('button').forEach(b =>
     twoStep(b, '削除', () => { favs.splice(Number(b.dataset.del), 1); saveFavs(); }));
-  if (typeof owFillBase === 'function') owFillBase(); // 版13：片道散歩の「帰る場所」の選択肢
 }
 $('favAdd').onclick = () => {
   if (!dest) return;
@@ -479,8 +479,9 @@ async function calc(m) {
   if (walk && route && vias.length && !rrPlan) { const v0 = vias.length; vias = vias.filter(v => !passedOnRoute(v)); if (vias.length < v0) drawVias(); }
   busy = true; calcState = {k: 'calc', msg: ''};
   try {
-    if (rrPlan) await calcReroute(); else if (mode === 'loop') await calcLoop(); else await calcTo();
-    calcState = route ? {k: 'ok', msg: ''} : {k: 'fail', msg: $('sub').textContent || 'ルートが見つかりませんでした'};
+    let r = null;
+    if (rrPlan) await calcReroute(); else if (mode === 'loop') await calcLoop(); else r = await calcTo();
+    calcState = route ? {k: 'ok', msg: ''} : r === 'far' ? {k: 'far', msg: ''} : {k: 'fail', msg: $('sub').textContent || 'ルートが見つかりませんでした'};
   }
   catch (e) { showErr(jaErr(e)); status(''); calcState = {k: 'fail', msg: jaErr(e)}; }
   finally {
@@ -493,8 +494,9 @@ async function calcTo() {
   if (straight > MAX_M) {
     clearRoute();
     $('rem').textContent = '徒歩の範囲を超えています';
-    $('sub').textContent = `直線で${fmtDist(straight)}あります。降りる駅を目的地にしてください。`;
-    return;
+    $('sub').textContent = `直線で${fmtDist(straight)}あります。「🚃 電車をはさむ」で、駅までと駅からを歩くルートにできます。`;
+    if (!trip && typeof trainOpen === 'function') setTimeout(() => trainOpen(), 0); // 版14：遠いときは電車をはさむ欄を自動で開く
+    return 'far';
   }
   const kinds = vias.length ? [] : poiKinds();
   if (kinds.length && $('ext').value === '0') $('ext').value = '500'; // 寄り道の遠回りの上限
@@ -792,7 +794,7 @@ function updateRemain() {
   lastRemain = remain; route.a = a;
   route.remUp = route.prof ? upFrom(route.prof, a) : 0;
   $('rem').textContent = route.rough ? `残り 約${fmtDist(remain)}（位置が粗いため目安）`
-    : remain < 20 ? (route.loop ? '出発点に戻りました' : '目的地付近です') : `残り ${fmtDist(remain)}　約${walkMin(remain, route.remUp)}分`;
+    : remain < 20 ? (route.loop ? '出発点に戻りました' : trip && trip.leg === 1 ? '乗る駅に着きました' : '目的地付近です') : `残り ${fmtDist(remain)}　約${walkMin(remain, route.remUp)}分`;
   showSummary();
   drawProf(a);
   maybeVibrate();
@@ -810,8 +812,7 @@ function showSummary() {
   if (cands.length > 1) h += `　案${candIdx + 1}／${cands.length}`;
   if (route.loop && route.dir) h += `　${route.dir}`;
   if (route.rr) h += '<br>組み直したルート（最初の予定の全長に合わせています）';
-  if (owSel && !route.loop) h += '<br>🚉 片道散歩：' + (owSel.dir === 'go' ? `歩いて${esc(owSel.name)}まで（帰りは電車）` : `${esc(owSel.name)}から歩いて帰る（駅に着いたら🚶を押してください）`) +
-    ` <a href="${owLink(owSel)}" target="_blank" rel="noopener">🚃 乗換を調べる</a>`;
+  if (trip && !route.loop) h += '<br>' + tripLine();
   if (slopeMode()) h += slopeMode() === 1 ? '　坂・階段を避ける' : '　坂を選ぶ';
   if (tracks.some(t => t.k !== 'veh')) h += `<br>このルートの未踏破率 ${Math.round((route.ur ?? 1) * 100)}%`;
   if (cmpText && !route.loop) h += '<br>' + cmpText;

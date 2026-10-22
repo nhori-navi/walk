@@ -1,4 +1,4 @@
-// MichiMiru：画面の骨組み（版9。版12で境目のつまみ・画面の明るさ・歩行中の画面。版13で夜の見やすさ・文字の大きさ・片道散歩の並び）。下のタブ、地図の丸いボタン、ルートの結果のカード、道の好みの「押して選ぶ並び」、見た目
+// MichiMiru：画面の骨組み（版9。版12で境目のつまみ・画面の明るさ・歩行中の画面。版13で夜の見やすさ・文字の大きさ。版14で電車をはさむ）。下のタブ、地図の丸いボタン、ルートの結果のカード、道の好みの「押して選ぶ並び」、見た目
 // app.js のあと・help.js の前に読む。部品の id と動きは変えず、見せ方だけを変える
 (function () {
   const st = document.createElement('style');
@@ -103,10 +103,14 @@ body.walking #map{bottom:64px}
 #hud .turn .ttx{line-height:1.25}
 #hud .turn .ttx b{display:block;font-size:24px}
 #hud .turn.now{background:#c0392b;color:#fff}
-/* 版13：片道散歩の候補 */
-.owItem{border:1px solid #e1e8e3;border-radius:10px;padding:6px 9px;margin:6px 0;background:#fbfdfb;font-size:14px;line-height:1.6}
-.owItem .acts{margin:4px 0 0}
-.owT{font-size:14px;color:#1f6fd1;margin-left:4px}
+/* 版14：電車をはさむ（駅の候補は押して選ぶ） */
+#trainBox{display:none;border-top:1px dashed var(--line);margin:8px 0 0;padding:6px 0 0}
+#trainBox.on{display:block}
+.trList{display:flex;flex-direction:column;gap:4px;margin:4px 0}
+#panel .trList button{text-align:left;min-height:40px;line-height:1.4;padding:5px 10px}
+#panel .trList button.on{background:var(--gl);border-color:var(--g);color:var(--g);font-weight:bold}
+.trList .sm{display:block;font-size:13px;font-weight:normal;color:#5d6b63}
+.trT{font-size:14px;color:#1f6fd1;margin-left:4px}
 /* 版13：文字の大きさ（--fz＝1／1.15／1.3）。タブの中身・左上の案内・吹き出しは丸ごと拡大、下の帯とタブは文字だけ */
 .pane,#warn,#status,#err,#hud,#tip{zoom:var(--fz,1)}
 #tab button{font-size:min(16px,calc(14px * var(--fz,1)));white-space:normal}
@@ -131,8 +135,10 @@ body.dark .small{color:#c9d3cd}
 body.dark .row{color:#e6ece8}
 body.dark #sub{color:#dbe3de}
 body.dark #result{color:#a9c8ff}
-body.dark a,body.dark .owT{color:#a9c8ff}
-body.dark .hit,body.dark .owItem{background:#28322e;border-color:#3d4a45}
+body.dark a,body.dark .trT{color:#a9c8ff}
+body.dark #panel .trList button.on{background:var(--gl);border-color:#3aa85a;color:#c4f0cf}
+body.dark .trList .sm{color:#c9d3cd}
+body.dark .hit{background:#28322e;border-color:#3d4a45}
 body.dark .lst{border-color:#3d4a45}
 body.dark #prof{filter:invert(.88) hue-rotate(180deg);border-color:#3d4a45}
 body.dark [style*="color:#333"]{color:#e6ece8!important}
@@ -200,7 +206,7 @@ body.dark .me .dot{left:5px;top:5px;width:24px;height:24px;border-width:3px;box-
   window.curTab = () => cur;
   bar.querySelectorAll('.tb').forEach(b => b.onclick = () => { showTab(b.dataset.tab); if (walk && !document.body.classList.contains('menu')) $('menuBtn').click(); });
   // 版10：目的地を決めたのにルートがまだないときは「計算待ち」。押すとルートのタブの理由のところを光らせる
-  const waitingRoute = () => !route && !walk && ((mode === 'to' && !!dest) || (mode === 'loop' && calcState.k !== 'idle' && calcState.k !== 'ok'));
+  const waitingRoute = () => !route && !walk && calcState.k !== 'far' && ((mode === 'to' && !!dest) || (mode === 'loop' && calcState.k !== 'idle' && calcState.k !== 'ok'));
   $('walkFab').onclick = () => {
     if (waitingRoute()) {
       showTab('route'); const w = $('routeWhy');
@@ -243,8 +249,7 @@ body.dark .me .dot{left:5px;top:5px;width:24px;height:24px;border-width:3px;box-
   chips('loopKm', ['1km', '2km', '3km', '5km']);
   chips('loopDir', ['おまかせ', '時計回り', '反時計回り']);
   chips('rrMode', ['自動', '聞いてから', 'しない']);
-  chips('owDir', ['駅から歩いて帰る', '歩いて駅まで行く']);
-  chips('owKm', ['2km', '3km', '4km', '5km', '6km']);
+  chips('trKm', ['最寄り', '1km', '2km', '3km']);
   function syncChips() { chipSets.forEach(([sel, w]) => w.querySelectorAll('button').forEach(b => b.classList.toggle('on', b.dataset.v === sel.value))); }
   window.chipOf = id => { const s = chipSets.find(([sel]) => sel.id === id); return s ? s[1] : $(id); };
   // 道の好みの開け閉めを覚える（初めは開いておく）

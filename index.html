@@ -88,7 +88,18 @@ body.walking.menu #panel{display:block;top:50%;bottom:52px;left:0;right:0;width:
       <div id="routeWhy"></div>
       <canvas id="prof"></canvas>
       <div id="result"></div>
-      <div class="acts"><button id="walkBtn" class="primary">記録だけ始める</button><button id="altBtn" disabled>別の案</button><button id="favAdd" disabled>★登録</button><button id="recalcBtn" disabled>再計算</button><button id="routeClear">✕ ルートを消す</button></div>
+      <div class="acts"><button id="walkBtn" class="primary">記録だけ始める</button><button id="altBtn" disabled>別の案</button><button id="favAdd" disabled>★登録</button><button id="recalcBtn" disabled>再計算</button><button id="trainBtn" style="display:none">🚃 電車をはさむ</button><button id="trSwitch" style="display:none"></button><button id="routeClear">✕ ルートを消す</button></div>
+      <div id="trainBox">
+        <div class="ch" id="trHead">🚃 電車をはさむ</div>
+        <div class="small">現在地 →（歩く）→ 乗る駅 →（電車）→ 降りる駅 →（歩く）→ 目的地。電車の時刻・運賃・乗り換えは「乗換を調べる」（Google マップ）で見てください。</div>
+        <div class="row" style="margin-top:6px"><b>① 乗る駅</b>（現在地の近く）</div>
+        <div id="trA" class="trList"></div>
+        <div class="row" style="margin-top:6px">降りてから歩く距離：<select id="trKm"><option value="0">最寄り</option><option value="1">1km</option><option value="2">2km</option><option value="3">3km</option></select></div>
+        <div class="row"><b>② 降りる駅</b>（目的地の近く）</div>
+        <div id="trB" class="trList"></div>
+        <div id="trMsg" class="small"></div>
+        <div class="acts"><button id="trGo" class="primary" disabled>このルートにする</button><a id="trLink" class="trT" target="_blank" rel="noopener" style="display:none">🚃 乗換を調べる</a><button id="trCancel">やめる</button></div>
+      </div>
       <div id="favForm" class="row">名前：<input id="favName" style="width:50%"><button id="favSave">保存</button><button id="favCancel">やめる</button></div>
     </div>
     <div class="card">
@@ -104,16 +115,6 @@ body.walking.menu #panel{display:block;top:50%;bottom:52px;left:0;right:0;width:
       <div class="row">距離：<select id="loopKm"><option>1</option><option>2</option><option selected>3</option><option>5</option></select></div>
       <div class="row">向き：<select id="loopDir"><option value="auto">おまかせ</option><option value="cw">時計回り</option><option value="ccw">反時計回り</option></select></div>
       <div class="acts"><button id="loopBtn" class="primary">🔁 周回コースを作る</button></div>
-    </div>
-    <div class="card" id="owCard">
-      <div class="ch" id="owHead">🚉 片道散歩（電車＋歩き）</div>
-      <div class="row">向き：<select id="owDir"><option value="home">駅から歩いて帰る</option><option value="go">歩いて駅まで行く</option></select></div>
-      <div class="row">歩く距離：<select id="owKm"><option>2</option><option selected>3</option><option>4</option><option>5</option><option>6</option></select></div>
-      <div class="row"><span id="owBaseLbl">帰る場所</span>：<select id="owBase"></select></div>
-      <div class="acts"><button id="owBtn" class="primary">🚉 駅を探す</button><button id="owStop" style="display:none">やめる</button></div>
-      <div id="owMsg" class="row"></div>
-      <div id="owList"></div>
-      <div class="small">まわりの駅から歩く距離に合う駅を選び、今の道の好み（未踏破・坂・遊歩道）でルートを作って、未踏破の長い順に3つ出します。電車の時刻・運賃・乗り換えは出しません（「乗換を調べる」で Google マップを開きます）。初めての地域は道のデータの取得に時間がかかります。</div>
     </div>
     <details class="card" id="prefs">
       <summary class="ch">道の好み<span id="prefSum"></span></summary>
@@ -234,7 +235,7 @@ body.walking.menu #panel{display:block;top:50%;bottom:52px;left:0;right:0;width:
     ・住所検索：検索した文字だけ → 国土地理院<br>
     ・比較ルート（入にしたときだけ）：出発地・経由地・目的地の座標 → Mapbox 社<br>
     ・旅の地図：市区町村の境目と線路のデータは、このサイトから読み込みます（外のサービスには何も送りません）<br>
-    ・片道散歩：帰る場所（出発する場所）のまわり約2km四方のマスを中心に、東西南北おおよそ7kmの範囲 → OpenStreetMap の公開サーバー（駅のデータ）。「乗換を調べる」を押したときだけ、駅の位置（と、駅まで行く向きのときは約500m単位に丸めた帰る場所）→ Google 社<br>
+    ・電車をはさむ：出発地と目的地それぞれのまわり約2km四方のマスを中心に、東西南北おおよそ7kmの範囲 → OpenStreetMap の公開サーバー（駅のデータ）。「乗換を調べる」を押したときだけ、乗る駅と降りる駅の位置 → Google 社<br>
     ・東海道の地図：旧東海道の道筋（初めの1回だけ。あなたの場所は送りません）→ OpenStreetMap の公開サーバー。「ストリートビューで見る」「Googleマップで見る」を押したときだけ、東海道の上の今の位置（あなたの現在地ではありません）→ Google 社
     </div>
   </details>
@@ -251,17 +252,17 @@ window.addEventListener('error', e => {
   if (el) el.textContent = el.textContent ? el.textContent + ' ／ ' + m : m;
 }, true);
 </script>
-<script src="config.js?v=13"></script>
-<script src="base.js?v=13"></script>
-<script src="road.js?v=13"></script>
-<script src="poi.js?v=13"></script>
-<script src="walk.js?v=13"></script>
-<script src="play.js?v=13"></script>
-<script src="tokaido.js?v=13"></script>
-<script src="tabi.js?v=13"></script>
-<script src="app.js?v=13"></script>
-<script src="oneway.js?v=13"></script>
-<script src="ui.js?v=13"></script>
-<script src="help.js?v=13"></script>
+<script src="config.js?v=14"></script>
+<script src="base.js?v=14"></script>
+<script src="road.js?v=14"></script>
+<script src="poi.js?v=14"></script>
+<script src="walk.js?v=14"></script>
+<script src="play.js?v=14"></script>
+<script src="tokaido.js?v=14"></script>
+<script src="tabi.js?v=14"></script>
+<script src="app.js?v=14"></script>
+<script src="train.js?v=14"></script>
+<script src="ui.js?v=14"></script>
+<script src="help.js?v=14"></script>
 </body>
 </html>
