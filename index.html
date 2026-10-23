@@ -5,6 +5,15 @@
 <title>MichiMiru</title>
 <meta name="description" content="未踏破・坂・遊歩道・寄り道など、自分の基準で道を選ぶ徒歩ナビ">
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1">
+<!-- 版16：ホーム画面のアプリ（PWA） -->
+<meta name="theme-color" content="#1e7e34">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="icon-192.png">
+<link rel="apple-touch-icon" href="apple-touch-icon.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="MichiMiru">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
 <link href="https://api.mapbox.com/mapbox-gl-js/v3.9.0/mapbox-gl.css" rel="stylesheet">
 <script src="https://api.mapbox.com/mapbox-gl-js/v3.9.0/mapbox-gl.js"></script>
 <style>
@@ -194,6 +203,13 @@ body.walking.menu #panel{display:block;top:50%;bottom:52px;left:0;right:0;width:
       <div id="helpSlot"></div>
     </div>
     <div class="card">
+      <div class="ch" id="appHead">📱 ホーム画面のアプリ</div>
+      <div id="appState" class="row"></div>
+      <div class="acts"><button id="appAdd" class="primary">📲 ホーム画面に追加</button></div>
+      <div id="appHow" class="small" style="display:none"></div>
+      <div class="small">ホーム画面に追加すると、アドレスの帯のない画面で開けます。アプリのファイルを端末に控えるので、電波の弱い所でも画面は開きます（地図と道のデータは今までどおり通信で取ります）。画面を消すと止まるのは、ホーム画面のアプリでも同じです。</div>
+    </div>
+    <div class="card">
       <div class="ch" id="themeHead">画面の明るさ・文字の大きさ</div>
       <div class="row"><select id="themeSel"><option value="auto">自動（夜は暗く）</option><option value="light">いつも明るい</option><option value="dark">いつも暗い</option></select></div>
       <div class="row">夜の地図：<select id="nightSel"><option value="dusk">夕方くらい</option><option value="night">真っ暗な夜</option><option value="day">明るいまま</option></select></div>
@@ -252,17 +268,17 @@ window.addEventListener('error', e => {
   if (el) el.textContent = el.textContent ? el.textContent + ' ／ ' + m : m;
 }, true);
 </script>
-<script src="config.js?v=15"></script>
-<script src="base.js?v=15"></script>
-<script src="road.js?v=15"></script>
-<script src="poi.js?v=15"></script>
-<script src="walk.js?v=15"></script>
-<script src="play.js?v=15"></script>
-<script src="tokaido.js?v=15"></script>
-<script src="tabi.js?v=15"></script>
-<script src="app.js?v=15"></script>
-<script src="train.js?v=15"></script>
-<script src="ui.js?v=15"></script>
-<script src="help.js?v=15"></script>
+<script src="config.js?v=16"></script>
+<script src="base.js?v=16"></script>
+<script src="road.js?v=16"></script>
+<script src="poi.js?v=16"></script>
+<script src="walk.js?v=16"></script>
+<script src="play.js?v=16"></script>
+<script src="tokaido.js?v=16"></script>
+<script src="tabi.js?v=16"></script>
+<script src="app.js?v=16"></script>
+<script src="train.js?v=16"></script>
+<script src="ui.js?v=16"></script>
+<script src="help.js?v=16"></script>
 </body>
 </html>

@@ -1,0 +1,18 @@
+{
+  "name": "MichiMiru",
+  "short_name": "MichiMiru",
+  "description": "未踏破・坂・遊歩道・寄り道など、自分の基準で道を選ぶ徒歩ナビ",
+  "id": "/walk/",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "any",
+  "background_color": "#f2f5f3",
+  "theme_color": "#1e7e34",
+  "lang": "ja",
+  "icons": [
+    { "src": "icon-192.png", "sizes": "192x192", "type": "image/png" },
+    { "src": "icon-512.png", "sizes": "512x512", "type": "image/png" },
+    { "src": "icon-maskable.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ]
+}

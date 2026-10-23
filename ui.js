@@ -1,4 +1,4 @@
-// MichiMiru：画面の骨組み（版9。版12で境目のつまみ・画面の明るさ・歩行中の画面。版13で夜の見やすさ・文字の大きさ。版14で電車をはさむ）。下のタブ、地図の丸いボタン、ルートの結果のカード、道の好みの「押して選ぶ並び」、見た目
+// MichiMiru：画面の骨組み（版9。版12で境目のつまみ・画面の明るさ・歩行中の画面。版13で夜の見やすさ・文字の大きさ。版14で電車をはさむ。版16でホーム画面のアプリ）。下のタブ、地図の丸いボタン、ルートの結果のカード、道の好みの「押して選ぶ並び」、見た目
 // app.js のあと・help.js の前に読む。部品の id と動きは変えず、見せ方だけを変える
 (function () {
   const st = document.createElement('style');
@@ -329,6 +329,7 @@ body.dark .me .dot{left:5px;top:5px;width:24px;height:24px;border-width:3px;box-
       try { map.setConfigProperty('basemap', 'lightPreset', t.preset); presetNow = t.preset; } catch (e) {}  // 地図の準備がまだなら、次の判定でやり直す
     }
     nightLines(t.dark);
+    const tc = document.querySelector('meta[name=theme-color]'); if (tc) tc.setAttribute('content', t.dark ? '#1e2522' : '#1e7e34'); // 版16：画面の上の帯の色
   }
   window.applyTheme = applyTheme;
   $('themeSel').addEventListener('change', () => { lsSet('walk_theme', $('themeSel').value); applyTheme(); syncChips(); });
@@ -348,6 +349,28 @@ body.dark .me .dot{left:5px;top:5px;width:24px;height:24px;border-width:3px;box-
   }
   $('fontSel').addEventListener('change', () => { lsSet('walk_font', $('fontSel').value); applyFont(); syncChips(); });
   applyFont();
+
+  // ---------- 版16：ホーム画面のアプリ（PWA） ----------
+  // サービスワーカー（sw.js）は /walk/ の中のファイルだけを扱う。登録できなくても普通に使える
+  if ('serviceWorker' in navigator && location.protocol === 'https:') navigator.serviceWorker.register('sw.js').catch(() => {});
+  const isApp = () => (window.matchMedia && matchMedia('(display-mode: standalone)').matches) || navigator.standalone === true;
+  let installEv = null;
+  window.addEventListener('beforeinstallprompt', e => { e.preventDefault(); installEv = e; appUi(); });
+  window.addEventListener('appinstalled', () => { installEv = null; appUi(); status('ホーム画面に MichiMiru を追加しました'); });
+  function appUi() {
+    const st = $('appState'), btn = $('appAdd'), how = $('appHow');
+    if (isApp()) { st.textContent = '📱 ホーム画面のアプリとして起動中'; btn.style.display = 'none'; how.style.display = 'none'; return; }
+    st.textContent = 'いまはブラウザで開いています';
+    btn.style.display = '';
+    how.innerHTML = IOS
+      ? 'iPhone：Safari の下の<b>共有ボタン</b>（四角から上向きの矢印）→<b>「ホーム画面に追加」</b>。※iPhone ではホーム画面のアプリと Safari で記録の置き場所が別です。Safari で記録タブの「全部まとめて書き出す」→ アプリで「記録を読み込む」で移せます'
+      : installEv ? '' : 'ボタンで出ないときは、Chrome の右上の<b>︙</b>→<b>「ホーム画面に追加」</b>（または「アプリをインストール」）。Android では、ブラウザとホーム画面のアプリで記録は共通です';
+  }
+  $('appAdd').onclick = async () => {
+    if (installEv) { installEv.prompt(); try { await installEv.userChoice; } catch (e) {} installEv = null; appUi(); return; }
+    $('appHow').style.display = 'block';
+  };
+  appUi();
 
   // ---------- 版12：歩行中の「終了」は2回押し（3秒以内にもう一度で終わる。ポケットの中などでの押し間違いを防ぐ） ----------
   let endArm = 0, endTm = 0;
