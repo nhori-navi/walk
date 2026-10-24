@@ -118,8 +118,12 @@ function showErr(m) {
 }
 const esc = s => String(s).replace(/[&<>"']/g, c => ({'&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;', "'":'&#39;'}[c]));
 // 歩行中はメニューが隠れるので、状況の表示を左上にも短く出す
+// 版17：いちばん上に出すのは、計算中・準備中（⏳）と、操作の案内だけ。済んだ知らせ（計算完了・準備しました）は、ルートのカードの下に小さく
 const status = m => {
-  $('status').textContent = m;
+  m = m || '';
+  if (/^(周回コース )?計算完了/.test(m)) { const n = $('calcNote'); if (n) n.textContent = m.replace(/^(周回コース )?計算完了 /, '計算 '); $('status').textContent = ''; }
+  else if (/準備しました/.test(m)) $('status').textContent = '';
+  else $('status').textContent = m && /…/.test(m) && !/^[⏳📍⚠]/.test(m) ? '⏳ ' + m : m;
   if (walk && m) { walk.msg = m; walk.msgErr = false; walk.msgUntil = Date.now() + 8000; renderHud(); }
 };
 const pause = () => new Promise(r => setTimeout(r, 30));

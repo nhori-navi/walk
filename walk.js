@@ -182,7 +182,8 @@ async function applyWake() {
     try { await wakeLock.release(); } catch (e) {}
     wakeLock = null;
   }
-  $('wakeBtn').textContent = '画面ON：' + (wakeOn ? '入' : '切');
+  $('wakeBtn').textContent = '☀️ 画面ON'; $('wakeBtn').classList.toggle('on', wakeOn); // 版17：入のときは黄色
+  $('wakeBtn').title = wakeOn ? '画面を消さない：入（押すと切）' : '画面を消さない：切（押すと入）';
 }
 $('wakeBtn').onclick = () => {
   if (!('wakeLock' in navigator)) { $('wakeBtn').textContent = '使えません'; setTimeout(applyWake, 3000); return; }

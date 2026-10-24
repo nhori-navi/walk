@@ -1,4 +1,4 @@
-// MichiMiru：画面の骨組み（版9。版12で境目のつまみ・画面の明るさ・歩行中の画面。版13で夜の見やすさ・文字の大きさ。版14で電車をはさむ。版16でホーム画面のアプリ）。下のタブ、地図の丸いボタン、ルートの結果のカード、道の好みの「押して選ぶ並び」、見た目
+// MichiMiru：画面の骨組み（版9。版12で境目のつまみ・画面の明るさ・歩行中の画面。版13で夜の見やすさ・文字の大きさ。版14で電車をはさむ。版16でホーム画面のアプリ。版17でルートタブの切り替え・スイッチ・お知らせの整理）。下のタブ、地図の丸いボタン、ルートの結果のカード、道の好みの「押して選ぶ並び」、見た目
 // app.js のあと・help.js の前に読む。部品の id と動きは変えず、見せ方だけを変える
 (function () {
   const st = document.createElement('style');
@@ -103,6 +103,29 @@ body.walking #map{bottom:64px}
 #hud .turn .ttx{line-height:1.25}
 #hud .turn .ttx b{display:block;font-size:24px}
 #hud .turn.now{background:#c0392b;color:#fff}
+/* 版17：何をしたいかの切り替え（目的地へ／周回／電車をはさむ） */
+#rmodeBar{margin:0 0 6px}
+#rmodeBar .chips{display:flex;gap:4px;width:100%}
+#panel #rmodeBar .chips button{flex:1;min-height:46px;border-radius:12px;padding:4px 2px;font-size:14px;font-weight:bold;white-space:nowrap}
+#tab-route [data-rm]{display:none}
+body.rm-to #tab-route [data-rm~="to"],body.rm-loop #tab-route [data-rm~="loop"],body.rm-train #tab-route [data-rm~="train"]{display:block}
+#rhint{display:none;margin:2px 4px 8px;font-size:15px;color:#1e5631;font-weight:bold}
+body:not(.rc-on) #rhint{display:block}
+body:not(.rc-on) #routeCard{display:none}
+#calcNote:empty{display:none}
+#calcNote{margin:4px 0 0}
+/* 版17：大きな切り替えスイッチ（行全体を押せる） */
+label.sw{display:flex;align-items:center;gap:10px;min-height:44px;padding:4px 0;border-bottom:1px solid #eef2ef;cursor:pointer;font-size:15px;color:var(--ink)}
+label.sw:last-of-type{border-bottom:none}
+label.sw .swt{flex:1;line-height:1.35}
+label.sw .swt small{display:block;font-size:12px;color:#5d6b63;margin-top:1px}
+label.sw input{appearance:none;-webkit-appearance:none;flex:0 0 52px;width:52px;height:30px;margin:0;border-radius:15px;background:#c9d3cd;position:relative;transition:background .15s;cursor:pointer}
+label.sw input::before{content:'';position:absolute;left:3px;top:3px;width:24px;height:24px;border-radius:50%;background:#fff;box-shadow:0 1px 3px rgba(0,0,0,.35);transition:left .15s}
+label.sw input:checked{background:var(--g)}
+label.sw input:checked::before{left:25px}
+label.sw input:disabled{opacity:.45}
+/* 版17：歩行中の「画面ON」は入のとき黄色 */
+#tab #wakeBtn.on{background:#ffd23f;border-color:#e0b400;color:#3a2e00}
 /* 版14：電車をはさむ（駅の候補は押して選ぶ） */
 #trainBox{display:none;border-top:1px dashed var(--line);margin:8px 0 0;padding:6px 0 0}
 #trainBox.on{display:block}
@@ -182,6 +205,12 @@ body.dark #helpBox{background:#1e2522;color:var(--ink)}
 body.dark #helpBox details{background:none;border-color:#3d4a45}
 body.dark #helpBox summary{color:#a8e0b4}
 body.dark #helpBox details[open] summary{color:#ffb3a8}
+body.dark label.sw{border-color:#3d4a45}
+body.dark label.sw .swt small{color:#c9d3cd}
+body.dark label.sw input{background:#4a5852}
+body.dark label.sw input:checked{background:#2e9e4c}
+body.dark #rhint{color:#a8e0b4}
+body.dark #tab #wakeBtn.on{background:#ffd23f;border-color:#e0b400;color:#3a2e00}
 body.dark .qb,body.dark #panel .qb{background:#34403b;color:#8fe3a3;border-color:#8fe3a3}
 /* 版13：夜は現在地の点を大きく */
 body.dark .me .dot{left:5px;top:5px;width:24px;height:24px;border-width:3px;box-shadow:0 0 0 3px rgba(30,144,255,.35),0 0 8px rgba(0,0,0,.7)}
@@ -221,6 +250,12 @@ body.dark .me .dot{left:5px;top:5px;width:24px;height:24px;border-width:3px;box-
   window.uiReach = el => {
     const p = el && el.closest && el.closest('.pane');
     if (p && !p.classList.contains('on')) return bar.querySelector(`.tb[data-tab="${p.id.slice(4)}"]`);
+    // 版17：切り替えで隠れているカードの中なら、その切り替えのボタンを光らせる
+    const rc = el && el.closest && el.closest('[data-rm]');
+    if (rc && !rc.dataset.rm.split(' ').includes($('rmode').value)) {
+      const want = rc.dataset.rm.split(' ')[0], cb = chipOf('rmode');
+      return (cb && cb.querySelector(`button[data-v="${want}"]`)) || el;
+    }
     return el;
   };
 
@@ -251,6 +286,7 @@ body.dark .me .dot{left:5px;top:5px;width:24px;height:24px;border-width:3px;box-
   chips('loopDir', ['おまかせ', '時計回り', '反時計回り']);
   chips('rrMode', ['自動', '聞いてから', 'しない']);
   chips('trKm', ['最寄り', '1km', '2km', '3km']);
+  chips('rmode', ['📍 目的地へ', '🔁 ぐるっと周回', '🚃 電車をはさむ']);
   function syncChips() { chipSets.forEach(([sel, w]) => w.querySelectorAll('button').forEach(b => b.classList.toggle('on', b.dataset.v === sel.value))); }
   window.chipOf = id => { const s = chipSets.find(([sel]) => sel.id === id); return s ? s[1] : $(id); };
   // 道の好みの開け閉めを覚える（初めは開いておく）
@@ -350,6 +386,29 @@ body.dark .me .dot{left:5px;top:5px;width:24px;height:24px;border-width:3px;box-
   $('fontSel').addEventListener('change', () => { lsSet('walk_font', $('fontSel').value); applyFont(); syncChips(); });
   applyFont();
 
+  // ---------- 版17：何をしたいかの切り替え（目的地へ／周回／電車をはさむ） ----------
+  // 見せるカードを変えるだけ。電車をはさむのときは、目的地を決めると歩くルートは計算せず、乗る駅と降りる駅の欄を開く（app.js の calcTo）
+  const RHINT = {to: '行き先を検索するか、「📍 地図で指定」を押して地図をタップしてください',
+    loop: '距離と向きを選んで「🔁 周回コースを作る」を押してください',
+    train: 'まず行き先を検索してください。決めると、乗る駅と降りる駅を選べます'};
+  // ルートのカードは、ルート・目的地・計算待ち・電車の欄があるときだけ。ないときは案内の1行
+  function updRc() {
+    const rcOn = !!route || !!dest || waitingRoute() || $('trainBox').classList.contains('on');
+    document.body.classList.toggle('rc-on', rcOn);
+    if (!rcOn) $('rhint').textContent = RHINT[$('rmode').value] || RHINT.to;
+  }
+  window.updRc = updRc;
+  const RM = ['to', 'loop', 'train'];
+  const rmInit = trip ? 'train' : (mode === 'loop' && route) ? 'loop' : getLS('walk_rmode');
+  $('rmode').value = RM.includes(rmInit) ? rmInit : 'to';
+  function rmApply() { RM.forEach(k => document.body.classList.toggle('rm-' + k, $('rmode').value === k)); updRc(); }
+  $('rmode').addEventListener('change', () => {
+    const v = $('rmode').value; lsSet('walk_rmode', v); rmApply(); syncChips();
+    if (v === 'train') { if (dest && mode === 'to' && !trip && !$('trainBox').classList.contains('on')) trainOpen(); }
+    else if ($('trainBox').classList.contains('on') && !trip) { trainClose(); if (dest && mode === 'to' && !route) calc('to'); }
+  });
+  rmApply();
+  window.rmSet = v => { if ($('rmode').value !== v) { $('rmode').value = v; lsSet('walk_rmode', v); rmApply(); syncChips(); } };
   // ---------- 版16：ホーム画面のアプリ（PWA） ----------
   // サービスワーカー（sw.js）は /walk/ の中のファイルだけを扱う。登録できなくても普通に使える
   if ('serviceWorker' in navigator && location.protocol === 'https:') navigator.serviceWorker.register('sw.js').catch(() => {});
@@ -414,6 +473,8 @@ body.dark .me .dot{left:5px;top:5px;width:24px;height:24px;border-width:3px;box-
     b.toggle('has-route', !!route);
     b.toggle('has-plan', !!(route || dest || vias.length || startPt));
     const wr = waitingRoute();
+    updRc(); // 版17
+    if (trip && $('rmode').value !== 'train') rmSet('train');
     $('walkFabTx').textContent = route ? '歩き始める' : wr ? (calcState.k === 'calc' ? '計算中…' : '計算待ち') : '記録だけ';
     $('recalcBtn').textContent = walk && route ? '🔄 組み直す' : '再計算';
     showWhy(wr);

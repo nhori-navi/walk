@@ -393,11 +393,13 @@ $('routeClear').onclick = () => {
   clearRoute(); clearVia(); clearStart(); hideWarn(); waitCalc = false; roughOk = false; loopStart = null; mode = 'to'; clearTrip();
   dest = null; if (destMarker) { destMarker.remove(); destMarker = null; }
   $('favAdd').disabled = true; $('recalcBtn').disabled = true;
-  $('rem').textContent = '目的地を設定してください';
+  $('rem').textContent = '行き先を決めてください'; $('calcNote').textContent = '';
+  if (typeof updRc === 'function') updRc();
   status(walk ? 'ルートを消しました。記録はそのまま続けています。' : 'ルートを消しました。「記録だけ始める」で記録だけできます。');
   renderHud();
 };
 $('loopBtn').onclick = () => {
+  if (typeof rmSet === 'function') rmSet('loop');
   dest = null; clearVia(); loopStart = null; clearTrip();
   if (destMarker) { destMarker.remove(); destMarker = null; }
   $('favAdd').disabled = true; $('recalcBtn').disabled = false;
@@ -463,6 +465,7 @@ renderFavs();
 
 // ---------- ルートを出す ----------
 function clearRoute() {
+  if ($('calcNote')) $('calcNote').textContent = '';
   route = null; cands = []; candIdx = 0; lastRemain = null;
   $('altBtn').disabled = true; updWalkBtn();
   cmpCoords = null; cmpText = ''; setData('route', []); setData('cmp', []); $('sub').innerHTML = '';
@@ -491,12 +494,20 @@ async function calc(m) {
   }
 }
 async function calcTo() {
+  // 版17：「🚃 電車をはさむ」を選んでいるときは、歩くルートは計算せず、乗る駅と降りる駅の欄を開く
+  if (typeof trainOpen === 'function' && $('rmode').value === 'train' && !trip) {
+    clearRoute();
+    $('rem').textContent = '目的地：' + (destName || '地図で選んだ場所');
+    $('sub').textContent = '下の欄で、乗る駅と降りる駅を選んでください。';
+    if (!$('trainBox').classList.contains('on')) setTimeout(() => trainOpen(), 0);
+    return 'far';
+  }
   const from = origin().slice(), straight = distM(from, dest);
   if (straight > MAX_M) {
     clearRoute();
     $('rem').textContent = '徒歩の範囲を超えています';
     $('sub').textContent = `直線で${fmtDist(straight)}あります。「🚃 電車をはさむ」で、駅までと駅からを歩くルートにできます。`;
-    if (!trip && typeof trainOpen === 'function') setTimeout(() => trainOpen(), 0); // 版14：遠いときは電車をはさむ欄を自動で開く
+    if (!trip && typeof trainOpen === 'function') { if (typeof rmSet === 'function') rmSet('train'); setTimeout(() => trainOpen(), 0); } // 版14：遠いときは電車をはさむ欄を自動で開く（版17：切り替えも電車に）
     return 'far';
   }
   const kinds = vias.length ? [] : poiKinds();
