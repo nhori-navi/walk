@@ -84,6 +84,7 @@ map.on('rotatestart', e => { if (e.originalEvent) { setFollow(false); touchedMap
 map.on('touchstart', () => touchedMap());
 map.on('mousedown', () => touchedMap());
 map.on('click', e => {
+  if (Date.now() - lpAt < 800) return; // 版18：長押しのあとの指を離したタップは使わない
   const p = [e.lngLat.lng, e.lngLat.lat];
   if (pickMode === 'from') { pickMode = null; setStart(p); }
   else if (pickMode === 'dest') { pickMode = null; destName = ''; setDest(p); }
@@ -97,6 +98,43 @@ map.on('click', e => {
     if (!onPoi) showMeshAt(p);
   }
 });
+
+// ---------- 版18：地図の長押し（パソコンは右クリック）で「この場所を…」 ----------
+// 0.6秒、指を動かさずに押していたら枠を出す。地図を動かしたり2本指にしたら取りやめ。東海道・旅の地図・地図で場所を選んでいる間は出さない
+let lpTimer = 0, lpStart = null, lpAt = 0, lpPt = null, lpMarker = null;
+function lpCancel() { clearTimeout(lpTimer); lpTimer = 0; lpStart = null; }
+function lpOpen(ll) {
+  if (mapMode || pickMode || document.body.classList.contains('lp')) return;
+  lpAt = Date.now(); lpPt = [ll.lng, ll.lat];
+  if (lpMarker) lpMarker.remove();
+  const el = document.createElement('div'); el.className = 'lpMk';
+  lpMarker = new mapboxgl.Marker({element: el}).setLngLat(lpPt).addTo(map);
+  const canVia = (dest && mode === 'to') || mode === 'loop';
+  $('lpVia').style.display = canVia && vias.length < VIA_MAX ? '' : 'none';
+  $('lpFrom').style.display = walk ? 'none' : '';
+  document.body.classList.add('lp');
+  if (CAN_VIB) { try { navigator.vibrate(30); } catch (er) {} }
+}
+function lpClose() { document.body.classList.remove('lp'); if (lpMarker) { lpMarker.remove(); lpMarker = null; } }
+map.on('touchstart', e => {
+  lpCancel();
+  const t = e.originalEvent && e.originalEvent.touches;
+  if (t && t.length > 1) return;
+  lpStart = {x: e.point.x, y: e.point.y, ll: e.lngLat};
+  lpTimer = setTimeout(() => { const s = lpStart; lpCancel(); if (s) lpOpen(s.ll); }, 600);
+});
+map.on('touchmove', e => { if (lpStart && Math.hypot(e.point.x - lpStart.x, e.point.y - lpStart.y) > 10) lpCancel(); });
+map.on('touchend', lpCancel); map.on('touchcancel', lpCancel);
+map.on('movestart', e => { if (e.originalEvent) lpCancel(); });
+map.on('contextmenu', e => { lpCancel(); if (Date.now() - lpAt > 800) lpOpen(e.lngLat); }); // 右クリック（スマホの長押しでも来ることがある）
+$('lpNo').onclick = lpClose;
+$('lpDest').onclick = () => {
+  const p = lpPt; lpClose();
+  if (typeof rmSet === 'function' && $('rmode').value === 'loop') rmSet('to');
+  destName = ''; setDest(p); showTab('route');
+};
+$('lpVia').onclick = () => { const p = lpPt; lpClose(); addVia(p); showTab('route'); };
+$('lpFrom').onclick = () => { const p = lpPt; lpClose(); setStart(p); showTab('route'); };
 
 // ---------- 追従と向き ----------
 // 地図の右下の「現在地に戻る」ボタン（追従がOFFのときだけ出す）

@@ -83,6 +83,12 @@ body.walking.menu #panel{display:block;top:50%;bottom:52px;left:0;right:0;width:
 <div id="hud"></div>
 <div id="mbar"><div id="mbRow"><span id="mbLine"></span><button id="mbInfo" title="詳しく">ⓘ</button><button id="mbClose" title="閉じる">✕</button></div><div id="mbMore"></div></div>
 <div id="tab"><button id="menuBtn">▲メニュー</button><button id="wakeBtn">☀️ 画面ON</button><button id="lockBtn">🔒ロック</button><button id="endBtn">終了</button></div>
+<!-- 版18：地図の長押しの枠 -->
+<div id="lpBox"><div class="lpH">この場所を…</div>
+  <button id="lpDest" class="lpB primary">📍 ここを目的地にする</button>
+  <button id="lpVia" class="lpB">＋ ここに寄ってから行く（経由地）</button>
+  <button id="lpFrom" class="lpB">🟢 ここを出発地にする</button>
+  <button id="lpNo" class="lpB">やめる</button></div>
 <div id="lock"><div id="lockBadge">🔒 ロック中　ここを長押しで解除<div id="lockBar"></div></div></div>
 <div id="panel">
   <div id="warn"><div id="warnText"></div><button id="warnPick">出発地を地図で選ぶ</button><button id="warnForce">それでもこの位置で計算</button></div>
@@ -145,21 +151,29 @@ body.walking.menu #panel{display:block;top:50%;bottom:52px;left:0;right:0;width:
 
   <!-- あそぶ -->
   <section class="pane" id="tab-play">
-    <div class="card">
-      <div class="ch"><span id="playSum">あそぶ（踏破マス・スタンプ帳・東海道）</span></div>
+    <!-- 版18：成績のまとめ（押すとその欄へ） -->
+    <div id="ptiles">
+      <button class="pt" data-go="meshCard"><span class="pi">🟧</span><b id="ptMesh">0</b><span class="pl">踏破マス</span><span class="ps" id="ptMeshS"></span></button>
+      <button class="pt" data-go="meshCard"><span class="pi">🏆</span><b id="ptDone">0</b><span class="pl">完全制覇</span><span class="ps"></span></button>
+      <button class="pt" data-go="stampCard"><span class="pi">📮</span><b id="ptStamp">0</b><span class="pl">スタンプ</span><span class="ps"></span></button>
+      <button class="pt" data-go="tkCard"><span class="pi">🏯</span><b id="ptTk">0km</b><span class="pl">東海道</span><span class="ps" id="ptTkS"></span></button>
+    </div>
+    <div class="card" id="meshCard">
+      <div class="ch"><span id="playSum">🟧 踏破マス</span></div>
       <div id="meshStat" class="row"></div>
       <label class="sw"><span class="swt">地図に踏破マスを表示<small>マスをタップすると残りの道が出ます</small></span><input type="checkbox" id="meshChk"></label>
       <div class="small">マスの道を全部歩くと金色（完全制覇）。くわしくは「？」</div>
       <div class="row" style="margin-top:6px">あと少しのマス（残り200m以下・近い順）</div>
       <div id="nearList" class="lst"></div>
     </div>
-    <div class="card">
+    <div class="card" id="tkCard">
       <div class="ch" id="tkHead">🏯 バーチャル東海道（日本橋→京都三条大橋 約495km）</div>
       <div id="tkText" class="small" style="color:#333;line-height:1.6"></div>
-      <div style="background:#e8ece9;border-radius:4px;height:8px;margin:4px 0"><div id="tkBar" style="background:#e67e22;height:8px;border-radius:4px;width:0"></div></div>
+      <div id="tkBarL" class="tkbl"><span id="tkFromN"></span><span id="tkToN"></span></div>
+      <div class="tkbar"><div id="tkBar"></div></div>
       <div class="acts"><button id="tkMapBtn" class="primary">地図で見る</button><button id="tkReset">最初からやり直す</button></div>
     </div>
-    <div class="card">
+    <div class="card" id="stampCard">
       <div class="ch" id="stampHead">📮 スタンプ帳</div>
       <div id="stampStat" class="row"></div>
       <div class="small">名前のある神社・寺・公園の50m以内を通ると押されます。名前をタップで場所へ</div>
@@ -271,17 +285,17 @@ window.addEventListener('error', e => {
   if (el) el.textContent = el.textContent ? el.textContent + ' ／ ' + m : m;
 }, true);
 </script>
-<script src="config.js?v=17"></script>
-<script src="base.js?v=17"></script>
-<script src="road.js?v=17"></script>
-<script src="poi.js?v=17"></script>
-<script src="walk.js?v=17"></script>
-<script src="play.js?v=17"></script>
-<script src="tokaido.js?v=17"></script>
-<script src="tabi.js?v=17"></script>
-<script src="app.js?v=17"></script>
-<script src="train.js?v=17"></script>
-<script src="ui.js?v=17"></script>
-<script src="help.js?v=17"></script>
+<script src="config.js?v=18"></script>
+<script src="base.js?v=18"></script>
+<script src="road.js?v=18"></script>
+<script src="poi.js?v=18"></script>
+<script src="walk.js?v=18"></script>
+<script src="play.js?v=18"></script>
+<script src="tokaido.js?v=18"></script>
+<script src="tabi.js?v=18"></script>
+<script src="app.js?v=18"></script>
+<script src="train.js?v=18"></script>
+<script src="ui.js?v=18"></script>
+<script src="help.js?v=18"></script>
 </body>
 </html>

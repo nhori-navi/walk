@@ -26,7 +26,7 @@ function meshPoly(k, c) {
   return {type: 'Feature', properties: {k, c: c || 'w'}, geometry: {type: 'Polygon', coordinates: [[[w, s], [e, s], [e, n], [w, n], [w, s]]]}};
 }
 // 歩行中の記録を除いた分（記録が変わったときにまとめて計算しておき、歩行中は今の記録だけ足す）
-let meshBase = new Map(), playCleaned = [], playDist = 0, meshCount = 0;
+let meshBase = new Map(), playCleaned = [], playDist = 0, meshCount = 0, meshToday = 0;
 function updPlay(cleaned) {
   playCleaned = cleaned;
   updMesh(false);
@@ -50,10 +50,11 @@ function playLive() {
   }
   const d0 = new Date(); d0.setHours(0, 0, 0, 0);
   let today = 0; cells.forEach(v => { if (v >= d0.getTime()) today++; });
-  meshCount = cells.size;
+  meshCount = cells.size; meshToday = today;
   if (walk) meshLive(); // 歩行中は、いま歩いている記録の分だけ「歩いた道」の印を足して完全制覇を調べる
   const doneN = Object.keys(meshDone).length;
   $('meshStat').textContent = `踏破マス：${cells.size}個（今日 新しく${today}個）・🏆完全制覇 ${doneN}個`;
+  updPlaySum();
   if ($('meshChk').checked) {
     const f = [...cells.keys()].map(k => meshPoly(k, meshClass(k)));
     Object.keys(meshDone).forEach(k => { if (!cells.has(k)) f.push(meshPoly(k, 'done')); });
@@ -210,15 +211,19 @@ const TOKAIDO = [['日本橋', 0], ['品川宿', 7.9], ['川崎宿', 17.7], ['�
   ['土山宿', 433.1], ['水口宿', 443.7], ['石部宿', 457.4], ['草津宿', 469.2], ['大津宿', 483.6], ['京都三条大橋', 495.4]];
 const TK_LEN = TOKAIDO[TOKAIDO.length - 1][1];
 const tkFrom = () => Number(getLS('walk_tokaido_from')) || 0;
-let tkKm = 0;
+let tkKm = 0, tkNext = null; // 版18：まとめに出す次の宿場 {n：名前, rem：残りkm}
 function updTokaido(m) {
   const km = m / 1000, lap = Math.floor(km / TK_LEN), r = km - lap * TK_LEN;
   let i = 0; while (i + 2 < TOKAIDO.length && TOKAIDO[i + 1][1] <= r) i++;
   const nx = TOKAIDO[i + 1], here = i === 0 && lap > 0 ? '京都三条大橋' : TOKAIDO[i][0];
-  tkKm = km;
+  tkKm = km; tkNext = {n: nx[0], rem: nx[1] - r};
   $('tkText').innerHTML = (lap ? `京都に${lap}回着きました。いま${lap + 1}周目<br>` : '') +
     `${i === 0 ? '日本橋を出発した' : TOKAIDO[i][0] + 'を過ぎた'}ところ（${r.toFixed(1)}km／${TK_LEN}km）<br>次の${nx[0]}まで あと${(nx[1] - r).toFixed(1)}km`;
-  $('tkBar').style.width = (r / TK_LEN * 100).toFixed(1) + '%';
+  // 版18：棒は「いまの宿場から次の宿場まで」の進み具合。上に前後の宿場名
+  const a0 = TOKAIDO[i][1], span = nx[1] - a0;
+  $('tkBar').style.width = (span > 0 ? Math.min(100, (r - a0) / span * 100) : 0).toFixed(1) + '%';
+  $('tkFromN').textContent = i === 0 && lap === 0 ? '日本橋' : TOKAIDO[i][0]; $('tkToN').textContent = nx[0];
+  updPlaySum();
   // 宿場に着いたら知らせる（数え直したときや、初めて開いたときは知らせない）
   const prog = lap * (TOKAIDO.length - 1) + i, last = getLS('walk_tokaido_last');
   if (last !== null && prog > Number(last)) {
@@ -291,6 +296,14 @@ function drawStampList() {
   });
   updPlaySum();
 }
+// 版18：あそぶタブの上の成績のまとめ（大きな数字4つ）
 function updPlaySum() {
-  $('playSum').textContent = `あそぶ（踏破マス ${meshCount}・完全制覇 ${Object.keys(meshDone).length}・スタンプ ${Object.keys(stamps).length}・東海道 ${tkKm.toFixed(1)}km）`;
+  if (!$('ptMesh')) return;
+  $('ptMesh').textContent = meshCount;
+  $('ptMeshS').textContent = meshToday ? `今日 +${meshToday}` : '';
+  $('ptDone').textContent = Object.keys(meshDone).length;
+  $('ptStamp').textContent = Object.keys(stamps).length;
+  $('ptTk').textContent = tkKm.toFixed(1) + 'km';
+  $('ptTkS').textContent = tkNext ? `${tkNext.n}まで ${tkNext.rem.toFixed(1)}km` : '';
 }
+document.querySelectorAll('#ptiles .pt').forEach(b => b.onclick = () => { const c = $(b.dataset.go); if (c) c.scrollIntoView({behavior: 'smooth', block: 'start'}); });

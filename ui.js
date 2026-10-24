@@ -1,4 +1,4 @@
-// MichiMiru：画面の骨組み（版9。版12で境目のつまみ・画面の明るさ・歩行中の画面。版13で夜の見やすさ・文字の大きさ。版14で電車をはさむ。版16でホーム画面のアプリ。版17でルートタブの切り替え・スイッチ・お知らせの整理）。下のタブ、地図の丸いボタン、ルートの結果のカード、道の好みの「押して選ぶ並び」、見た目
+// MichiMiru：画面の骨組み（版9。版12で境目のつまみ・画面の明るさ・歩行中の画面。版13で夜の見やすさ・文字の大きさ。版14で電車をはさむ。版16でホーム画面のアプリ。版17でルートタブの切り替え・スイッチ・お知らせの整理。版18で長押しの枠・🗂 表示の切り替え・あそぶのまとめ）。下のタブ、地図の丸いボタン、ルートの結果のカード、道の好みの「押して選ぶ並び」、見た目
 // app.js のあと・help.js の前に読む。部品の id と動きは変えず、見せ方だけを変える
 (function () {
   const st = document.createElement('style');
@@ -124,6 +124,31 @@ label.sw input::before{content:'';position:absolute;left:3px;top:3px;width:24px;
 label.sw input:checked{background:var(--g)}
 label.sw input:checked::before{left:25px}
 label.sw input:disabled{opacity:.45}
+/* 版18：地図の長押しの枠（画面の下から） */
+#lpBox{display:none;position:fixed;left:8px;right:8px;bottom:72px;z-index:40;background:#fff;border-radius:16px;padding:10px 12px 12px;box-shadow:0 4px 18px rgba(0,0,0,.35)}
+body.lp #lpBox{display:block}
+body.walking #lpBox{bottom:72px}
+@media (min-width:900px){#lpBox{left:auto;right:396px;width:340px}}
+.lpH{font-weight:bold;color:#1e5631;margin:0 0 6px;font-size:15px}
+#lpBox .lpB{display:block;width:100%;min-height:46px;margin:0 0 6px;border-radius:12px;border:1px solid var(--line);background:#fff;color:var(--ink);font-size:15px;text-align:left;padding:6px 14px}
+#lpBox .lpB.primary{background:var(--g);border-color:var(--g);color:#fff;font-weight:bold}
+#lpBox #lpNo{margin:0;text-align:center}
+.lpMk{width:22px;height:22px;border-radius:50%;background:#ff5e5b;border:3px solid #fff;box-shadow:0 0 0 6px rgba(255,94,91,.3),0 1px 4px rgba(0,0,0,.4)}
+/* 版18：🗂 地図の表示の切り替え */
+#layerBox{display:none;position:absolute;right:62px;top:116px;z-index:5;width:236px;background:#fff;border-radius:14px;padding:4px 12px;box-shadow:0 2px 12px rgba(0,0,0,.3)}
+#layerBox.on{display:block}
+body.mode-tk #layerBox,body.mode-tabi #layerBox{display:none}
+/* 版18：あそぶのまとめ */
+#ptiles{display:grid;grid-template-columns:1fr 1fr;gap:6px;margin:0 0 8px}
+@media (min-width:600px) and (max-width:899px){#ptiles{grid-template-columns:repeat(4,1fr)}}
+#panel #ptiles .pt{position:relative;display:flex;flex-direction:column;align-items:flex-start;min-height:0;padding:6px 12px 6px;border-radius:14px;border:1px solid #e1e8e3;background:#fff;text-align:left;line-height:1.15}
+#ptiles .pi{position:absolute;right:10px;top:8px;font-size:20px}
+#ptiles b{font-size:26px;color:#1e5631}
+#ptiles .pl{font-size:13px;color:#5d6b63;font-weight:bold}
+#ptiles .ps{font-size:12px;color:#d35400;min-height:14px}
+.tkbl{display:flex;justify-content:space-between;font-size:13px;font-weight:bold;color:#6e2c00;margin:6px 2px 2px}
+.tkbar{background:#e8ece9;border-radius:8px;height:16px;margin:0 0 6px;overflow:hidden}
+#tkBar{background:#e67e22;height:16px;border-radius:8px;width:0}
 /* 版17：歩行中の「画面ON」は入のとき黄色 */
 #tab #wakeBtn.on{background:#ffd23f;border-color:#e0b400;color:#3a2e00}
 /* 版14：電車をはさむ（駅の候補は押して選ぶ） */
@@ -210,6 +235,16 @@ body.dark label.sw .swt small{color:#c9d3cd}
 body.dark label.sw input{background:#4a5852}
 body.dark label.sw input:checked{background:#2e9e4c}
 body.dark #rhint{color:#a8e0b4}
+body.dark #lpBox,body.dark #layerBox{background:#28322e;color:var(--ink);box-shadow:0 4px 18px rgba(0,0,0,.6)}
+body.dark .lpH{color:#a8e0b4}
+body.dark #lpBox .lpB{background:#34403b;color:var(--ink);border-color:var(--line)}
+body.dark #lpBox .lpB.primary{background:#1e7e34;border-color:#3aa85a;color:#fff}
+body.dark #panel #ptiles .pt{background:#28322e;border-color:#3d4a45}
+body.dark #ptiles b{color:#a8e0b4}
+body.dark #ptiles .pl{color:#c9d3cd}
+body.dark #ptiles .ps{color:#ffd27a}
+body.dark .tkbl{color:#ffd27a}
+body.dark .tkbar{background:#3d4a45}
 body.dark #tab #wakeBtn.on{background:#ffd23f;border-color:#e0b400;color:#3a2e00}
 body.dark .qb,body.dark #panel .qb{background:#34403b;color:#8fe3a3;border-color:#8fe3a3}
 /* 版13：夜は現在地の点を大きく */
@@ -261,8 +296,25 @@ body.dark .me .dot{left:5px;top:5px;width:24px;height:24px;border-width:3px;box-
 
   // ---------- 地図の右の丸いボタン（追従・向き） ----------
   const mb = document.createElement('div'); mb.id = 'mapBtns';
-  mb.innerHTML = '<button id="mFollow" title="現在地に追従">◎</button><button id="mHead" title="地図の向き">N</button>';
+  mb.innerHTML = '<button id="mFollow" title="現在地に追従">◎</button><button id="mHead" title="地図の向き">N</button><button id="mLayer" title="地図に出すもの">🗂</button>';
   $('map').appendChild(mb);
+  // 版18：🗂 地図に出すもの（設定・あそぶのスイッチと同じもの。こちらを押すと元のスイッチを入切する）
+  const LAYERS = [['meshChk', '🟧 踏破マス'], ['poiShow', '⛩ 神社・寺・公園'], ['walkedChk', '🟢 歩いた道']];
+  const lb = document.createElement('div'); lb.id = 'layerBox';
+  lb.innerHTML = LAYERS.map(([id, t]) => `<label class="sw"><span class="swt">${t}</span><input type="checkbox" data-for="${id}"></label>`).join('');
+  $('map').appendChild(lb);
+  const layerSync = () => lb.querySelectorAll('input').forEach(i => { i.checked = $(i.dataset.for).checked; });
+  lb.querySelectorAll('input').forEach(i => i.addEventListener('change', () => {
+    const r = $(i.dataset.for); if (r.checked === i.checked) return;
+    r.checked = i.checked; r.dispatchEvent(new Event('change'));
+  }));
+  $('mLayer').onclick = e => { e.stopPropagation(); layerSync(); lb.classList.toggle('on'); $('mLayer').classList.toggle('on', lb.classList.contains('on')); };
+  // 枠の外を押したら閉じる
+  document.addEventListener('pointerdown', e => {
+    if (!lb.classList.contains('on') || lb.contains(e.target) || e.target === $('mLayer')) return;
+    lb.classList.remove('on'); $('mLayer').classList.remove('on');
+  }, true);
+  window.layerSync = layerSync;
   $('mFollow').onclick = () => $('followBtn').click();
   $('mHead').onclick = () => $('headBtn').click();
 
