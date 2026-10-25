@@ -504,6 +504,7 @@ renderFavs();
 // ---------- ルートを出す ----------
 function clearRoute() {
   if ($('calcNote')) $('calcNote').textContent = '';
+  if ($('candList')) $('candList').innerHTML = '';
   route = null; cands = []; candIdx = 0; lastRemain = null;
   $('altBtn').disabled = true; updWalkBtn();
   cmpCoords = null; cmpText = ''; setData('route', []); setData('cmp', []); $('sub').innerHTML = '';
@@ -606,6 +607,11 @@ function extendCands(g, base, S, X, s, t) {
   return pickBest(out, Math.max(200, X * 0.4));
 }
 async function calcLoop() {
+  const om = loopOm; loopOm = false; // 版19：おまかせ散歩（未踏破を強めに、向きはおまかせ、未踏破の多い順）
+  loopOmMult = om ? 1.6 : 1;
+  try { await calcLoop0(om); } finally { loopOmMult = 1; }
+}
+async function calcLoop0(om) {
   if (!loopStart) loopStart = origin().slice(); // 出発点は「周回コースを作る」を押した場所（または地図で選んだ出発地）に固定
   const T = Number($('loopKm').value) * 1000, from = loopStart;
   const r = T / (3 * 1.25);
@@ -637,8 +643,9 @@ async function calcLoop() {
     }
     if (!list || !list.length) list = loopCands(g, s0, from, T, r);
   }
-  list = orientLoops(g, list);
-  cands = list.map(c => makeCand(g, c, [from].concat(toCoords(g, c.idx), [from]), {pts: [from], baseTotal: null, loop: true, dir: loopArea(g, c.idx) > 0 ? '反時計回り' : '時計回り'}));
+  if (!om) list = orientLoops(g, list);
+  cands = list.map(c => makeCand(g, c, [from].concat(toCoords(g, c.idx), [from]), {pts: [from], baseTotal: null, loop: true, T: vias.length ? 0 : T, dir: loopArea(g, c.idx) > 0 ? '反時計回り' : '時計回り'}));
+  if (!vias.length) sortCands(om ? 'un' : null);
   candIdx = 0; $('altBtn').disabled = cands.length < 2;
   showRoute();
   status(`周回コース 計算完了 ${nowHM()}（道のデータ：${g.from}）矢印の向きに歩いてください` +
@@ -653,19 +660,19 @@ function makeCand(g, c, coords, o) {
   return Object.assign({idx: c.idx, coords, rev: !!c.rev, stops: c.stops || null, ur: unexpRatio(g, c.idx), prof, turns}, o);
 }
 // 距離を指定した周回コースの候補
+// 版19：8方向 × 大きさ3通り（＋開き90°の案）で探し、±35%（最低400m）までの似ていない案を6つまで
 function loopCands(g, s0, from, T, r) {
   const out = [];
-  for (let k = 0; k < 8; k++) {
-    const th = k * 45;
-    for (const f of [0.8, 1.0]) {
-      const a = snap(g, offsetPt(from, th, r * f)), b = snap(g, offsetPt(from, th + 60, r * f));
-      if (a.i < 0 || b.i < 0) continue;
-      const idx = legsPath(g, [s0.i, a.i, b.i, s0.i], true); if (!idx) continue; // 版11：行きの道を帰りで使いにくく
-      if (overlapRatio(g, idx) > 0.3) continue;
-      out.push({idx, err: Math.abs(pathLen(g, idx) - T)});
-    }
+  const tries = [];
+  for (let k = 0; k < 8; k++) { [0.7, 0.9, 1.1].forEach(f => tries.push([k * 45, f, 60])); tries.push([k * 45, 0.85, 90]); }
+  for (const [th, f, sp] of tries) {
+    const a = snap(g, offsetPt(from, th, r * f)), b = snap(g, offsetPt(from, th + sp, r * f));
+    if (a.i < 0 || b.i < 0 || a.i === b.i) continue;
+    const idx = legsPath(g, [s0.i, a.i, b.i, s0.i], true); if (!idx) continue; // 版11：行きの道を帰りで使いにくく
+    if (overlapRatio(g, idx) > 0.3) continue;
+    out.push({idx, err: Math.abs(pathLen(g, idx) - T)});
   }
-  const list = pickBest(out, Math.max(300, T * 0.25));
+  const list = pickBest(out, Math.max(400, T * 0.35), 6);
   if (!list.length) { clearRoute(); throw new Error('条件に合う周回コースが見つかりませんでした。距離を変えて試してください'); }
   return list;
 }
@@ -675,13 +682,37 @@ function showRoute() {
     prof: c.prof, turns: c.turns || [], stops: c.stops, vib: {}, a: 0, remUp: c.prof ? c.prof.up : 0, dir: c.dir,
     // 版11：組み直しのための予定（最初の全長、そのときの歩いた距離、記録の点の位置、周回の出発点）
     planTotal: cumOf(c.coords).pop(), planWalk0: walk ? walk.dist : 0, idx0: walk ? walk.track.pts.length : 0, start: c.loop ? (loopStart || c.coords[0]) : null};
+  route.T = c.T || 0; route.g = graph; // 版19：周回の目安の距離、作ったときの道の網（元のルートに戻るとき使う）
   setData('route', line(c.coords));
-  updWalkBtn(); drawStops();
+  updWalkBtn(); drawStops(); renderCands();
   const b = new mapboxgl.LngLatBounds(); c.coords.forEach(p => b.extend(p));
   if (walk) setFollow(true);
   else { setFollow(false); map.fitBounds(b, {padding: 50, maxZoom: 17}); }
   updateRemain();
 }
+
+// ---------- 版19：案の一覧（押した案に切り替える）と並び順（周回：未踏破の多い順／距離の近い順） ----------
+const candLen = c => c.coords ? cumOf(c.coords).pop() : 0;
+function sortCands(how) {
+  how = how || (getLS('walk_loopsort') === 'len' ? 'len' : 'un');
+  const cur = cands[candIdx];
+  cands.forEach(c => { c.len = c.len || candLen(c); });
+  cands.sort(how === 'len' ? (a, b) => Math.abs(a.len - a.T) - Math.abs(b.len - b.T) : (a, b) => (b.ur - a.ur) || (Math.abs(a.len - a.T) - Math.abs(b.len - b.T)));
+  if (cur) candIdx = Math.max(0, cands.indexOf(cur));
+}
+function renderCands() {
+  const box = $('candList'); if (!box) return;
+  if (cands.length < 2) { box.innerHTML = ''; return; }
+  const hasRec = tracks.some(t => t.k !== 'veh'), loopSort = route && route.loop && cands.every(c => c.T);
+  const how = getLS('walk_loopsort') === 'len' ? 'len' : 'un';
+  box.innerHTML = (loopSort ? `<div class="csort">並び：<button data-s="un" class="${how === 'un' ? 'on' : ''}">未踏破が多い順</button><button data-s="len" class="${how === 'len' ? 'on' : ''}">距離が近い順</button></div>` : '') +
+    cands.map((c, i) => `<button class="cand${i === candIdx ? ' on' : ''}" data-i="${i}">案${i + 1}　${fmtDist(c.len || candLen(c))}${hasRec ? `・未踏破 ${Math.round((c.ur ?? 1) * 100)}%` : ''}${c.dir && c.loop ? '・' + c.dir : ''}</button>`).join('');
+  box.querySelectorAll('button.cand').forEach(b => b.onclick = () => { candIdx = Number(b.dataset.i); showRoute(); });
+  box.querySelectorAll('.csort button').forEach(b => b.onclick = () => { lsSet('walk_loopsort', b.dataset.s); sortCands(b.dataset.s); showRoute(); });
+}
+// 版19：おまかせ散歩（いまいる所から周回。距離は前回の選択、向きはおまかせ、未踏破を強めに探して多い順）
+let loopOm = false;
+$('omBtn').onclick = () => { if (typeof rmSet === 'function') rmSet('loop'); loopOm = true; $('loopBtn').click(); };
 
 // ---------- 版11：組み直し（道を外れたとき・「組み直す」） ----------
 // 引き継ぐもの：未踏破・坂・遊歩道の好み（そのまま）、経由地・寄り道先（まだ通っていない所だけ）、
@@ -748,10 +779,35 @@ function aheadNode(g, p, tp) {
   const i = distM(best.A, back) > distM(best.B, back) ? best.e.a : best.e.b;
   return {i, d: distM(p, [g.lon[i], g.lat[i]])};
 }
+// 版19：外れた所から、元のルートのこの先（500m先まで）へ戻る道を探す。戻る道が300m以内ならその道＋元のルートの残り
+const RJ_AHEAD = 500, RJ_MAX = 300;
+function rejoinPlan(g, from, s0, old, mids) {
+  const c = old.coords, cum = old.cum, a = old.a || 0, n = c.length;
+  // 元のルートの座標を今の道の網の点に当てはめる（最初と最後は出発地・目的地なので除く）
+  const nodes = c.map((p, k) => (k === 0 || k === n - 1) ? undefined : nodeOf(g, p));
+  const sp = shortFrom(g, s0.i, RJ_MAX + 200);
+  let best = null;
+  for (let j = 1; j < n - 1; j++) {
+    if (cum[j] <= a + 5 || cum[j] > a + RJ_AHEAD) continue;
+    const v = nodes[j]; if (v === undefined || !isFinite(sp.d[v])) continue;
+    const L = sp.len[v] + s0.d;
+    if (L > RJ_MAX) continue;
+    // まだ通っていない経由地・寄り道先を飛ばしてしまう合流点は使わない
+    if (mids.some(m => { for (let k = 1; k <= j; k++) if (cum[k] > a && segDist(m, c[k - 1], c[k]).d <= 40) return true; return false; })) continue;
+    const score = sp.d[v] + s0.d + 0.3 * (cum[j] - a);
+    if (!best || score < best.score) best = {j, v, L, score};
+  }
+  if (!best) return null;
+  const rest = nodes.slice(best.j, n - 1);
+  if (rest.some(v => v === undefined)) return null;
+  const idx = sp.path(best.v).concat(rest.slice(1));
+  return {idx, L: best.L, goal: c[n - 1]};
+}
 async function calcReroute() {
   const plan = rrPlan; rrPlan = null;
   const from = pos.slice(), goal = plan.loop ? plan.start : dest, pts = [from, ...plan.mids, goal];
   const budget = plan.total - (walk.dist - plan.walk0); // 最初の予定の全長から、もう歩いた分を引いた残り
+  const old = route;
   status('ルートを組み直しています…'); await pause();
   await ensureGraph(bboxOf(pts, MARGIN + 600), bboxOf(pts, MARGIN + 1100));
   await ensureElev(graph);
@@ -765,6 +821,32 @@ async function calcReroute() {
   const marked = [];
   markWalkedPts(g, walk.track.pts.slice(Math.max(0, plan.idx0 - 1)), 'u', marked);
   marked.forEach(e => { e.u = 2; });
+  // 版19：① 少しの寄り道なら、元のルートに戻る
+  let rj = null;
+  try { if (old && old.coords) rj = rejoinPlan(g, from, sn[0], old, plan.mids); } catch (e) { rj = null; }
+  if (rj) {
+    marked.forEach(e => { e.u = 0; });
+    const keepStops = old.stops && old.g === g ? old.stops.filter(s => !passedOnRoute(s.p)) : null;
+    cands = [makeCand(g, {idx: rj.idx, stops: keepStops && keepStops.length ? keepStops : null}, [from].concat(toCoords(g, rj.idx), [rj.goal]),
+      {pts, baseTotal: null, loop: plan.loop, dir: old.dir, T: old.T})];
+    candIdx = 0; $('altBtn').disabled = true;
+    showRoute();
+    route.planTotal = plan.total; route.planWalk0 = plan.walk0; route.rr = 'back'; if (plan.loop) route.start = plan.start;
+    const msg = `元のルートに戻ります（あと ${fmtDist(rj.L)} で合流）`;
+    status(msg + ` ${nowHM()}`);
+    walk.note = msg; walk.noteUntil = Date.now() + 15000; renderHud(); showSummary();
+    return;
+  }
+  // ② 大きく外れたときは、残りの距離で組み直す。元のルートのまだ歩いていない道を使いやすくする（×0.6）
+  const origMarked = [];
+  if (old && old.coords) {
+    const oc = old.coords, a0 = old.a || 0;
+    for (let k = 2; k < oc.length - 1; k++) {
+      if (old.cum[k] <= a0) continue;
+      const u = nodeOf(g, oc[k - 1]), v = nodeOf(g, oc[k]); if (u === undefined || v === undefined) continue;
+      const e = g.emap.get(edgeKey(u, v)); if (e && !e.u) { e.u = 3; origMarked.push(e); }
+    }
+  }
   let list;
   try {
     const base = legsPath(g, sn.map(s => s.i), plan.loop);
@@ -773,7 +855,7 @@ async function calcReroute() {
     list = [{idx: base}];
     if (X >= 150 && !plan.mids.length) { const ext = extendCands(g, base, baseLen, X, sn[0].i, sn[sn.length - 1].i); if (ext.length) list = ext; }
     if (plan.loop) list = orientLoops(g, list);
-  } finally { marked.forEach(e => { e.u = 0; }); }
+  } finally { marked.forEach(e => { e.u = 0; }); origMarked.forEach(e => { e.u = 0; }); }
   cands = list.map(c => makeCand(g, c, [from].concat(toCoords(g, c.idx), [goal]), {pts, baseTotal: null, loop: plan.loop, dir: plan.loop ? (loopArea(g, c.idx) > 0 ? '反時計回り' : '時計回り') : null}));
   candIdx = 0; $('altBtn').disabled = cands.length < 2;
   showRoute();
@@ -854,14 +936,15 @@ function showSummary() {
   if (!route) return;
   const total = route.cum[route.cum.length - 1];
   const pf = route.prof;
-  let h = (route.loop ? '周回コース ' : '') + `全長 ${fmtDist(total)}・約${walkMin(total, pf ? pf.up : 0)}分（分速80m${pf ? '＋上り10mごとに1分' : ''}）`;
+  let h = (route.loop ? '周回コース ' : '') + (route.loop && route.T && !route.rr ? `（目安 約${route.T / 1000}km）` : '') + `全長 ${fmtDist(total)}・約${walkMin(total, pf ? pf.up : 0)}分（分速80m${pf ? '＋上り10mごとに1分' : ''}）`;
   if (pf) h += `<br>上り ${Math.round(pf.up)}m・下り ${Math.round(pf.down)}m・最大勾配 ${Math.round(pf.maxg * 100)}%`;
   if (route.baseTotal && total - route.baseTotal > 50) h += `<br>最短より＋${fmtDist(total - route.baseTotal)}`;
   if (vias.length) h += `　経由地${vias.length}か所`;
   if (route.stops) h += `<br>寄り道：${route.stops.map(p => esc(poiLabel(p))).join('・')}`;
   if (cands.length > 1) h += `　案${candIdx + 1}／${cands.length}`;
   if (route.loop && route.dir) h += `　${route.dir}`;
-  if (route.rr) h += '<br>組み直したルート（最初の予定の全長に合わせています）';
+  if (route.rr === 'back') h += '<br>元のルートに戻るルート（寄り道の分だけ変えています）';
+  else if (route.rr) h += '<br>組み直したルート（最初の予定の全長に合わせています。元のルートの残りの道を使いやすくしています）';
   if (trip && !route.loop) h += '<br>' + tripLine();
   if (slopeMode()) h += slopeMode() === 1 ? '　坂・階段を避ける' : '　坂を選ぶ';
   if (tracks.some(t => t.k !== 'veh')) h += `<br>このルートの未踏破率 ${Math.round((route.ur ?? 1) * 100)}%`;

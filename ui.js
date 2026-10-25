@@ -1,4 +1,4 @@
-// MichiMiru：画面の骨組み（版9。版12で境目のつまみ・画面の明るさ・歩行中の画面。版13で夜の見やすさ・文字の大きさ。版14で電車をはさむ。版16でホーム画面のアプリ。版17でルートタブの切り替え・スイッチ・お知らせの整理。版18で長押しの枠・🗂 表示の切り替え・あそぶのまとめ）。下のタブ、地図の丸いボタン、ルートの結果のカード、道の好みの「押して選ぶ並び」、見た目
+// MichiMiru：画面の骨組み（版9。版12で境目のつまみ・画面の明るさ・歩行中の画面。版13で夜の見やすさ・文字の大きさ。版14で電車をはさむ。版16でホーム画面のアプリ。版17でルートタブの切り替え・スイッチ・お知らせの整理。版18で長押しの枠・🗂 表示の切り替え・あそぶのまとめ。版19でおまかせ散歩・案の一覧）。下のタブ、地図の丸いボタン、ルートの結果のカード、道の好みの「押して選ぶ並び」、見た目
 // app.js のあと・help.js の前に読む。部品の id と動きは変えず、見せ方だけを変える
 (function () {
   const st = document.createElement('style');
@@ -124,6 +124,17 @@ label.sw input::before{content:'';position:absolute;left:3px;top:3px;width:24px;
 label.sw input:checked{background:var(--g)}
 label.sw input:checked::before{left:25px}
 label.sw input:disabled{opacity:.45}
+/* 版19：おまかせ散歩のボタン・案の一覧 */
+#panel #omBtn{display:none;width:100%;min-height:58px;margin:0 0 8px;border-radius:14px;border:none;background:linear-gradient(135deg,#2fbf71,#1e7e34);color:#fff;font-size:18px;font-weight:bold;text-align:center;line-height:1.25;box-shadow:0 2px 6px rgba(30,126,52,.35)}
+#panel #omBtn small{display:block;font-size:12px;font-weight:normal;opacity:.9}
+body:not(.has-route):not(.walking) #panel #omBtn{display:block}
+#candList{display:flex;flex-direction:column;gap:4px;margin:6px 0 0}
+#candList:empty{display:none}
+#panel #candList .cand{text-align:left;min-height:38px;padding:4px 12px;font-size:14px}
+#panel #candList .cand.on{background:var(--gl);border-color:var(--g);color:var(--g);font-weight:bold}
+.csort{font-size:13px;color:#5d6b63;display:flex;align-items:center;gap:4px;flex-wrap:wrap}
+#panel .csort button{min-height:30px;padding:2px 10px;border-radius:15px;font-size:13px}
+#panel .csort button.on{background:var(--g);border-color:var(--g);color:#fff}
 /* 版18：地図の長押しの枠（画面の下から） */
 #lpBox{display:none;position:fixed;left:8px;right:8px;bottom:72px;z-index:40;background:#fff;border-radius:16px;padding:10px 12px 12px;box-shadow:0 4px 18px rgba(0,0,0,.35)}
 body.lp #lpBox{display:block}
@@ -235,6 +246,9 @@ body.dark label.sw .swt small{color:#c9d3cd}
 body.dark label.sw input{background:#4a5852}
 body.dark label.sw input:checked{background:#2e9e4c}
 body.dark #rhint{color:#a8e0b4}
+body.dark #panel #candList .cand.on{background:var(--gl);border-color:#3aa85a;color:#c4f0cf}
+body.dark .csort{color:#c9d3cd}
+body.dark #panel .csort button.on{background:#1e7e34;border-color:#3aa85a;color:#fff}
 body.dark #lpBox,body.dark #layerBox{background:#28322e;color:var(--ink);box-shadow:0 4px 18px rgba(0,0,0,.6)}
 body.dark .lpH{color:#a8e0b4}
 body.dark #lpBox .lpB{background:#34403b;color:var(--ink);border-color:var(--line)}
@@ -334,7 +348,7 @@ body.dark .me .dot{left:5px;top:5px;width:24px;height:24px;border-width:3px;box-
   chips('slope', ['気にしない', '避ける', 'あえて選ぶ']);
   chips('foot');
   chips('poiN', ['1か所', '2か所', '3か所']);
-  chips('loopKm', ['1km', '2km', '3km', '5km']);
+  chips('loopKm', ['約1km', '約2km', '約3km', '約5km']); // 版19：ぴったりでなくてよい（±35%くらいまでの案を出す）
   chips('loopDir', ['おまかせ', '時計回り', '反時計回り']);
   chips('rrMode', ['自動', '聞いてから', 'しない']);
   chips('trKm', ['最寄り', '1km', '2km', '3km']);

@@ -360,7 +360,7 @@ class Heap {
   }
 }
 function astar(g, s, t) {
-  const mult = Number($('unexp').value) || 1, sm = slopeMode(), ele = g.ele || null, ff = FOOT_F[Number($('foot').value) || 0];
+  const mult = Math.max(Number($('unexp').value) || 1, loopOmMult), sm = slopeMode(), ele = g.ele || null, ff = FOOT_F[Number($('foot').value) || 0];
   const hk = sm === 2 ? 0.6 : 1; // 「あえて選ぶ」は道が軽くなるので、目安の距離も合わせて軽くする
   const n = g.lon.length, d = new Float64Array(n).fill(Infinity), prev = new Int32Array(n).fill(-1), done = new Uint8Array(n);
   const tp = [g.lon[t], g.lat[t]], h = i => distM([g.lon[i], g.lat[i]], tp) * hk;
@@ -371,7 +371,7 @@ function astar(g, s, t) {
     if (v === t) break;
     for (const [u, e] of g.adj[v]) {
       let c = (e.k ? e.w * mult : e.w) * ff[e.c || 0];
-      if (e.u) c *= e.u === 2 ? RECENT_F : REUSE_F; // 版11：前の区間で使った道（×4）・たった今歩いてきた道（×10）は使いにくく
+      if (e.u) c *= e.u === 2 ? RECENT_F : e.u === 3 ? ORIG_F : REUSE_F; // 版11：前の区間で使った道（×4）・たった今歩いてきた道（×10）は使いにくく。版19：元のルートの残りの道（×0.6）は使いやすく
       if (sm) c = slopeCost(c, e, ele ? ele[v] : NaN, ele ? ele[u] : NaN, sm);
       const nd = d[v] + c;
       if (nd < d[u]) { d[u] = nd; prev[u] = v; H.push(nd + h(u), u); }
@@ -398,7 +398,29 @@ function unexpRatio(g, idx) {
   return L ? U / L : 1;
 }
 // 版11：avoid＝前の区間で使った道を、あとの区間では使いにくくする（周回で行きと帰りが重ならないように）
-const REUSE_F = 4, RECENT_F = 10;
+const REUSE_F = 4, RECENT_F = 10, ORIG_F = 0.6;
+let loopOmMult = 1; // 版19：おまかせ散歩の計算の間だけ、未踏破の優先を「強」（1.6）以上に
+// 版19：s から maxD m までの最短の道のり。元のルートへ戻る道を探すのに使う。たった今歩いてきた道（e.u=2）は少しだけ使いにくく（×2。行き止まりから戻るときは通れるように）。len＝本当の長さ
+function shortFrom(g, s, maxD) {
+  const n = g.lon.length, d = new Float64Array(n).fill(Infinity), len = new Float64Array(n).fill(Infinity), prev = new Int32Array(n).fill(-1), done = new Uint8Array(n);
+  const H = new Heap(); d[s] = 0; len[s] = 0; H.push(0, s);
+  while (H.size) {
+    const [dv, v] = H.pop();
+    if (done[v]) continue; done[v] = 1;
+    if (dv > maxD * 2) break;
+    for (const [u, e] of g.adj[v]) {
+      const nd = dv + e.w * (e.u === 2 ? 2 : 1);
+      if (nd < d[u]) { d[u] = nd; len[u] = len[v] + e.w; prev[u] = v; H.push(nd, u); }
+    }
+  }
+  return {d, len, prev, path: t => { const p = []; for (let v = t; v !== -1; v = prev[v]) p.push(v); return p.reverse(); }};
+}
+// 版19：座標 → 道の網の点の番号（ルートの座標を今の道の網に当てはめ直すため）
+function nodeKeyMap(g) {
+  if (!g.kmap) { g.kmap = new Map(); for (let i = 0; i < g.lon.length; i++) g.kmap.set(g.lon[i].toFixed(7) + ',' + g.lat[i].toFixed(7), i); }
+  return g.kmap;
+}
+const nodeOf = (g, p) => nodeKeyMap(g).get(p[0].toFixed(7) + ',' + p[1].toFixed(7));
 function legsPath(g, nodes, avoid) {
   let p = []; const used = [];
   try {
@@ -427,7 +449,7 @@ function overlapRatio(g, idx) {
   }
   return L ? dup / L : 0;
 }
-function pickBest(list, tol) {
+function pickBest(list, tol, max = 3) { // 版19：max＝出す案の数（周回は6）
   list = list.filter(c => c.err <= tol).sort((a, b) => a.err - b.err);
   const out = [];
   for (const c of list) {
@@ -437,7 +459,7 @@ function pickBest(list, tol) {
       return n / Math.min(c.es.size, o.es.size) > 0.7;
     });
     if (similar) continue;
-    out.push(c); if (out.length >= 3) break;
+    out.push(c); if (out.length >= max) break;
   }
   return out;
 }

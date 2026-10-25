@@ -126,7 +126,7 @@ async function poiLoopN(g, s0, from, T, cand, n) {
       tours.push({cb: stops.filter(x => x.poi).map(x => x.poi), seq: stops, est: L * 1.25, unv: cb.filter(p => !p.visited).length});
     });
   });
-  const list = tours.filter(v => Math.abs(v.est - T) <= T * 0.35).sort((a, b) => (b.unv - a.unv) || (Math.abs(a.est - T) - Math.abs(b.est - T))).slice(0, 6);
+  const list = tours.filter(v => Math.abs(v.est - T) <= T * 0.4).sort((a, b) => (b.unv - a.unv) || (Math.abs(a.est - T) - Math.abs(b.est - T))).slice(0, 6);
   const out = [];
   for (const v of list) {
     await pause();
@@ -143,7 +143,7 @@ async function poiLoopN(g, s0, from, T, cand, n) {
     const len = pathLen(g, idx); if (Math.abs(len - T) > T * 0.35) continue;
     out.push({idx, stops: v.cb, err: Math.abs(len - T) + (v.cb.length - v.unv) * T * 0.15});
   }
-  return pickBest(out, Infinity);
+  return pickBest(out, Infinity, 6); // 版19：周回は6案まで
 }
 // ルート上で寄り道先を通る位置に、案内を足す
 function stopTurns(idx, coords, stops) {

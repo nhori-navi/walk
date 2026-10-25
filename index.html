@@ -104,6 +104,7 @@ body.walking.menu #panel{display:block;top:50%;bottom:52px;left:0;right:0;width:
       <canvas id="prof"></canvas>
       <div id="result"></div>
       <div class="acts"><button id="walkBtn" class="primary">記録だけ始める</button><button id="altBtn" disabled>別の案</button><button id="favAdd" disabled>★登録</button><button id="recalcBtn" disabled>再計算</button><button id="trainBtn" style="display:none">🚃 電車をはさむ</button><button id="trSwitch" style="display:none"></button><button id="routeClear">✕ ルートを消す</button></div>
+      <div id="candList"></div>
       <div id="trainBox">
         <div class="ch" id="trHead">🚃 電車をはさむ</div>
         <div class="small">現在地 →（歩く）→ 乗る駅 →（電車）→ 降りる駅 →（歩く）→ 目的地。電車の時刻・運賃・乗り換えは「乗換を調べる」（Google マップ）で見てください。</div>
@@ -119,6 +120,7 @@ body.walking.menu #panel{display:block;top:50%;bottom:52px;left:0;right:0;width:
       <div id="calcNote" class="small"></div>
     </div>
     <!-- 版17：何をしたいかを選ぶ（目的地へ／周回／電車をはさむ） -->
+    <button id="omBtn">🎲 おまかせで歩く<small>いまいる所から、まだ歩いていない道の多い周回</small></button>
     <div id="rmodeBar"><select id="rmode"><option value="to">📍 目的地へ</option><option value="loop">🔁 ぐるっと周回</option><option value="train">🚃 電車をはさむ</option></select></div>
     <div id="rhint"></div>
     <div class="card" data-rm="to train">
@@ -285,17 +287,17 @@ window.addEventListener('error', e => {
   if (el) el.textContent = el.textContent ? el.textContent + ' ／ ' + m : m;
 }, true);
 </script>
-<script src="config.js?v=18"></script>
-<script src="base.js?v=18"></script>
-<script src="road.js?v=18"></script>
-<script src="poi.js?v=18"></script>
-<script src="walk.js?v=18"></script>
-<script src="play.js?v=18"></script>
-<script src="tokaido.js?v=18"></script>
-<script src="tabi.js?v=18"></script>
-<script src="app.js?v=18"></script>
-<script src="train.js?v=18"></script>
-<script src="ui.js?v=18"></script>
-<script src="help.js?v=18"></script>
+<script src="config.js?v=19"></script>
+<script src="base.js?v=19"></script>
+<script src="road.js?v=19"></script>
+<script src="poi.js?v=19"></script>
+<script src="walk.js?v=19"></script>
+<script src="play.js?v=19"></script>
+<script src="tokaido.js?v=19"></script>
+<script src="tabi.js?v=19"></script>
+<script src="app.js?v=19"></script>
+<script src="train.js?v=19"></script>
+<script src="ui.js?v=19"></script>
+<script src="help.js?v=19"></script>
 </body>
 </html>
