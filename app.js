@@ -279,7 +279,8 @@ function onPos(p) {
     if (waitCalc && !startPt) { waitCalc = false; calc(); } // 精度がよくなったら、待っていた計算をする
   }
   if (Date.now() - lastCompass > 3000 && c.heading != null && !isNaN(c.heading) && c.speed > 0.7 && c.accuracy <= REC_M) feedHeading(c.heading, 0.5);
-  if (walk) walkStep(c);
+  // 版20：アプリ版で裏の記録が動いているときは、裏の記録の位置（p.bg）だけを記録に使う（二重に数えない）
+  if (walk && (p.bg || typeof BG === 'undefined' || !BG.on)) walkStep(c, p.bg ? p.timestamp : 0);
   if (!(startPt && !walk)) cam();
   updateRemain();
   if (typeof tripOnPos === 'function') tripOnPos(); // 版14：降りる駅に着いたら、目的地までのルートに切り替える

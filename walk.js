@@ -10,8 +10,9 @@ function mets(kmh) {
   }
   return METS[METS.length - 1][1];
 }
-function walkStep(c) {
-  const now = Date.now(), p = [c.longitude, c.latitude];
+function walkStep(c, t) {
+  // 版20：アプリ版の裏の記録は、位置を取った時刻 t を使う（画面を消している間にまとめて届いても速さを正しく計算するため）
+  const now = t || Date.now(), p = [c.longitude, c.latitude];
   // 精度50m超が10秒以上続いたら、記録を止めていることを知らせる
   if (c.accuracy > REC_M) { if (!walk.badSince) walk.badSince = now; }
   else walk.badSince = 0;
@@ -136,9 +137,11 @@ function startWalk(prev) {
   clearInterval(hudTimer);
   let n = 0;
   hudTimer = setInterval(() => { renderHud(); if (++n % 6 === 0) { saveTracks(); saveSession(); updToday(); playLive(); } }, 5000);
-  wakeOn = true; applyWake(); // 記録を始めたら画面ONを「入」にする
+  // 記録を始めたら画面ONを「入」にする（版20：アプリ版で画面ONの仕組みがないときは入れない。画面を消しても記録が続くため）
+  wakeOn = !(/MichiMiruApp/.test(navigator.userAgent) && !('wakeLock' in navigator)); applyWake();
   saveSession();
   renderHud(); updToday();
+  if (typeof bgStart === 'function') bgStart(); // 版20：アプリ版なら、画面を消しても記録を続ける
 }
 $('walkBtn').onclick = () => {
   if (walk) return;
@@ -225,6 +228,7 @@ $('endBtn').onclick = () => {
   if (walk.track.pts.length < 2) tracks = tracks.filter(t => t !== walk.track);
   saveTracks();
   clearInterval(hudTimer); clearTimeout(followTimer); walk = null;
+  if (typeof bgStop === 'function') bgStop(); // 版20：裏の記録を止める（通知も消える）
   saveSession();
   setLock(false); wakeOn = false; applyWake();
   document.body.classList.remove('walking', 'menu');
@@ -451,9 +455,13 @@ $('recExport').onclick = () => {
   const set = {};
   BK_SET.concat(BK_TK).forEach(k => { const v = getLS(k); if (v !== null) set[k] = v; });
   const d = new Date();
-  const blob = new Blob([JSON.stringify({app: 'MichiMiru', kind: 'all', v: 2, t: Date.now(), data: {tracks, stamps, favs, set, meshdone: meshDone}})], {type: 'application/json'});
+  const txt = JSON.stringify({app: 'MichiMiru', kind: 'all', v: 2, t: Date.now(), data: {tracks, stamps, favs, set, meshdone: meshDone}});
+  const name = `michimiru-kiroku-${ymdNum(d)}.json`;
+  // 版20：アプリ版はダウンロードが使えないので、Documents フォルダーに保存する
+  if (typeof nativeSaveFile === 'function' && nativeSaveFile(name, txt)) { lsSet('walk_bk_last', String(Date.now())); updBkLast(); return; }
+  const blob = new Blob([txt], {type: 'application/json'});
   const a = document.createElement('a');
-  a.href = URL.createObjectURL(blob); a.download = `michimiru-kiroku-${ymdNum(d)}.json`;
+  a.href = URL.createObjectURL(blob); a.download = name;
   document.body.appendChild(a); a.click(); a.remove();
   setTimeout(() => URL.revokeObjectURL(a.href), 5000);
   lsSet('walk_bk_last', String(Date.now())); updBkLast();

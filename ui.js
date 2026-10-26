@@ -477,13 +477,15 @@ body.dark .me .dot{left:5px;top:5px;width:24px;height:24px;border-width:3px;box-
   window.rmSet = v => { if ($('rmode').value !== v) { $('rmode').value = v; lsSet('walk_rmode', v); rmApply(); syncChips(); } };
   // ---------- 版16：ホーム画面のアプリ（PWA） ----------
   // サービスワーカー（sw.js）は /walk/ の中のファイルだけを扱う。登録できなくても普通に使える
-  if ('serviceWorker' in navigator && location.protocol === 'https:') navigator.serviceWorker.register('sw.js').catch(() => {});
+  // 版20：Android アプリ版（目印 MichiMiruApp）では登録しない（アプリが毎回サイトを読みに行くため）
+  if ('serviceWorker' in navigator && location.protocol === 'https:' && !/MichiMiruApp/.test(navigator.userAgent)) navigator.serviceWorker.register('sw.js').catch(() => {});
   const isApp = () => (window.matchMedia && matchMedia('(display-mode: standalone)').matches) || navigator.standalone === true;
   let installEv = null;
   window.addEventListener('beforeinstallprompt', e => { e.preventDefault(); installEv = e; appUi(); });
   window.addEventListener('appinstalled', () => { installEv = null; appUi(); status('ホーム画面に MichiMiru を追加しました'); });
   function appUi() {
     const st = $('appState'), btn = $('appAdd'), how = $('appHow');
+    if (/MichiMiruApp/.test(navigator.userAgent)) { if (typeof appCard === 'function') appCard(); return; } // 版20：アプリ版の表示は native.js
     if (isApp()) { st.textContent = '📱 ホーム画面のアプリとして起動中'; btn.style.display = 'none'; how.style.display = 'none'; return; }
     st.textContent = 'いまはブラウザで開いています';
     btn.style.display = '';
