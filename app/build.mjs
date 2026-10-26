@@ -17,6 +17,7 @@ function setup() {
     name: 'michimiru-app', private: true, version: '1.0.0', type: 'module',
     dependencies: {
       '@capacitor/android': '8.5.3', '@capacitor/cli': '8.5.3', '@capacitor/core': '8.5.3',
+      '@capacitor/app': '8.1.2',   // 版21：スマホの「戻る」でヘルプや MeguMiru を閉じる
       '@capacitor/filesystem': '8.1.5', '@capacitor/local-notifications': '8.3.1',
       '@capacitor-community/background-geolocation': '1.3.1', 'sharp': '0.34.5'
     }
