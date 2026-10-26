@@ -955,4 +955,6 @@ function showSummary() {
 }
 $('ver').textContent = '版 ' + APP_VER;
 updLoc();
-restoreSession();
+// 版21：歩いた記録を大きな置き場から読み込んでから、歩行の続きを再開する（ほかの js を読み終えてから）
+function bootTracks() { trkLoad().catch(e => showErr('記録の読み込みに失敗しました（' + jaErr(e) + '）')).then(restoreSession); }
+if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', bootTracks); else bootTracks();

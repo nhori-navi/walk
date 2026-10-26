@@ -1,4 +1,4 @@
-// MichiMiru：版20 Android アプリ版（Capacitor）で開いたときだけ動く部分
+// MichiMiru：版20〜 Android アプリ版（Capacitor）で開いたときだけ動く部分（版21：MeguMiru を重ねて開く・戻るボタン）
 // ・歩いている間は「裏の記録」（BackgroundGeolocation）で位置を受け取り、いつもの記録（walkStep）に入れる
 //   → 画面を消してポケットに入れても記録が続く。記録中は通知欄に「MichiMiru 記録中」
 // ・書き出しはスマホの「Documents（ドキュメント）」フォルダーに保存（アプリの中ではダウンロードが使えないため）
@@ -59,8 +59,8 @@ function bgOnLoc(loc, err) {
   // いつもの現在地の流れ（onPos）に渡す。bg の印があるものだけを記録に使う（画面をつけている間の二重を防ぐ）
   onPos({coords: {longitude: loc.longitude, latitude: loc.latitude, accuracy: loc.accuracy == null ? 999 : loc.accuracy,
     heading: loc.bearing, speed: loc.speed == null ? null : loc.speed}, timestamp: loc.time || Date.now(), bg: true});
-  // 画面を消している間はタイマーが遅れるので、ここで保存しておく（30秒ごとか20点ごと）
-  if (Date.now() - BG.saved > 30000 || BG.n % 20 === 0) { BG.saved = Date.now(); saveTracks(); saveSession(); }
+  // 画面を消している間はタイマーが遅れるので、ここで保存しておく（30秒ごとか50点ごと）
+  if (Date.now() - BG.saved > 30000 || BG.n % 50 === 0) { BG.saved = Date.now(); saveTracks(); saveSession(); }
   if (BG.n % 20 === 0 && document.visibilityState === 'visible') appCard();
 }
 
@@ -85,17 +85,73 @@ function appCard() {
 
 // ---------- 書き出し：アプリ版は Documents フォルダーへ ----------
 // 成功したら true（walk.js の書き出しから呼ぶ）。ブラウザでは false を返していつものダウンロード
-function nativeSaveFile(name, text) {
+// 版21：done(ok, 文) を渡すと、結果をそちらに知らせる（MeguMiru の書き出しが使う）
+function nativeSaveFile(name, text, done) {
   if (!NATIVE || !capHas('Filesystem')) return false;
   CAP.nativePromise('Filesystem', 'writeFile', {path: name, data: text, directory: 'DOCUMENTS', encoding: 'utf8', recursive: true})
-    .then(() => status(`全部まとめて書き出しました（スマホの「Documents」フォルダーの ${name}）`))
-    .catch(e => showErr('書き出しに失敗しました（' + jaErr(e) + '）'));
+    .then(() => { const m = `書き出しました（スマホの「Documents」フォルダーの ${name}）`; if (done) done(true, m); else status('全部まとめて' + m); })
+    .catch(e => { const m = '書き出しに失敗しました（' + jaErr(e) + '）'; if (done) done(false, m); else showErr(m); });
   return true;
+}
+
+// ---------- 版21：MeguMiru を MichiMiru の上に重ねて開く（アプリ版だけ） ----------
+// 画面を切り替えると MichiMiru が止まって裏の記録が途切れるので、MichiMiru はそのままで上に重ねる。
+// 同じアドレスなので、MeguMiru は MichiMiru の記録をそのまま読める。戻るのは MeguMiru の「🚶」かスマホの「戻る」
+const MEGU_URL = new URL('../megu/', location.href).href;
+let meguFrame = null;
+const meguIsOpen = () => document.body.classList.contains('megu-on');
+function meguStyle() {
+  if ($('meguStyle')) return;
+  const st = document.createElement('style'); st.id = 'meguStyle';
+  st.textContent = '#meguFrame{position:fixed;left:0;top:0;width:100%;height:100%;border:0;z-index:9000;display:none;background:#f6f3f8}' +
+    'body.megu-on #meguFrame{display:block}#mapBtns #mMegu{background:#7a5c8e;color:#fff;font-size:12px;letter-spacing:-.5px}';
+  document.head.appendChild(st);
+}
+function meguOpen() {
+  meguStyle();
+  if (!meguFrame) {
+    meguFrame = document.createElement('iframe');
+    meguFrame.id = 'meguFrame'; meguFrame.title = 'MeguMiru';
+    meguFrame.allow = 'geolocation; screen-wake-lock';
+    meguFrame.src = MEGU_URL + '?inapp=1';
+    document.body.appendChild(meguFrame);
+  }
+  if (meguIsOpen()) return;
+  document.body.classList.add('megu-on');
+  try { history.pushState({mmMegu: 1}, ''); } catch (e) {}
+  lsSet('walk_megu_open', '1');
+}
+function meguClose(fromBack) {
+  if (!meguIsOpen()) return;
+  document.body.classList.remove('megu-on');
+  lsSet('walk_megu_open', '0');
+  if (!fromBack && history.state && history.state.mmMegu) { try { history.back(); } catch (e) {} }
+  try { map.resize(); } catch (e) {}
+}
+window.addEventListener('popstate', () => { if (meguIsOpen() && !(history.state && history.state.mmMegu)) meguClose(true); });
+// スマホの「戻る」（アプリの部品 App があるときだけ。ないときはアプリが裏に回るだけ）
+function backSetup() {
+  if (!capHas('App')) return;
+  try {
+    CAP.addListener('App', 'backButton', d => {
+      if (d && d.canGoBack) history.back();        // ヘルプ・MeguMiru などを閉じる
+      else CAP.nativePromise('App', 'minimizeApp', {}).catch(() => {}); // いちばん上の画面なら、アプリを裏に回す（記録は続く）
+    });
+  } catch (e) {}
 }
 
 if (IN_APP) {
   appCard();
-  if (walk) bgStart();   // 開き直して歩行を続きから再開したとき（restoreSession は先に動いている）
+  if (walk) bgStart();   // 開き直して歩行を続きから再開したとき
+  backSetup();
+  // 地図の右の丸いボタンに「Megu」を足す。前回 MeguMiru を見ていたら、それを開いて始める
+  if ($('mapBtns')) {
+    meguStyle();
+    const b = document.createElement('button'); b.id = 'mMegu'; b.title = 'MeguMiru を開く'; b.textContent = 'Megu';
+    b.onclick = e => { e.stopPropagation(); meguOpen(); };
+    $('mapBtns').appendChild(b);
+  }
+  if (getLS('walk_megu_open') === '1') meguOpen();
   setInterval(() => { if (BG.on && document.visibilityState === 'visible') appCard(); }, 10000);
   document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') appCard(); });
 }

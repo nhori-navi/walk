@@ -10,6 +10,67 @@ function mets(kmh) {
   }
   return METS[METS.length - 1][1];
 }
+// 版21：記録に点を足す。各点の時刻（記録の始まりからの秒）も ts に並べて残す（MeguMiru が使う）
+function pushPt(t, p, now) {
+  t.pts.push(roundP(p));
+  if (Array.isArray(t.ts)) {
+    if (t.ts.length === t.pts.length - 1) t.ts.push(Math.max(0, Math.round((now - t.t0) / 1000)));
+    else delete t.ts; // 数が合わなくなったら時刻は使わない（点の位置はそのまま）
+  }
+}
+// 歩いた1区間を足す（距離・カロリー・上り）
+function walkAdd(a, p, now) {
+  const d = distM(a.p, p), dt = Math.max((now - a.t) / 1000, 1), v = d / dt;
+  walk.dist += d;
+  walk.kcal += mets(v * 3.6) * weight() * dt / 3600 * 1.05;
+  pushPt(walk.track, p, now);
+  // 上った分のカロリー（標高タイルの高さで2m以上変わったら数える。体重1kgを1m持ち上げる≒0.0094kcal）
+  const eh = elevSync(p);
+  if (!isNaN(eh)) {
+    if (walk.eRef === null) walk.eRef = eh;
+    else if (eh - walk.eRef >= 2) { walk.up += eh - walk.eRef; walk.kcal += weight() * (eh - walk.eRef) * 0.0094; walk.eRef = eh; }
+    else if (walk.eRef - eh >= 2) walk.eRef = eh;
+  }
+}
+// ---------- 版21：乗り物の区間 ----------
+// 秒速4mより速い移動が3回（または合わせて150m）続いたら「乗り物」。乗り物の区間は別の記録（k:'veh'・src:'app'）に50mごとの点で残す
+// 遅い状態が2分続いたら歩きに戻し、遅くなってからの分はさかのぼって歩きに入れる（駅での停車で途切れないように）
+const VEH_V = 4, VEH_ON_N = 3, VEH_ON_M = 150, VEH_OFF_MS = 120000, VEH_PT_M = 50, GAP_S = 60, GAP_M = 300;
+function vehOpen() {
+  const a = walk.pendFrom, list = walk.pend, last = list[list.length - 1];
+  const vt = {k: 'veh', t0: a.t, t1: last.t, pts: [], ts: [], src: 'app', ses: walk.t0};
+  pushPt(vt, a.p, a.t); let lp = a.p;
+  list.forEach((x, i) => { if (distM(lp, x.p) >= VEH_PT_M || i === list.length - 1) { pushPt(vt, x.p, x.t); lp = x.p; } });
+  tracks.push(vt);
+  walk.vt = vt; walk.vLast = lp; walk.vFast = {p: last.p, t: last.t}; walk.sbuf = []; walk.pend = []; walk.pendFrom = null;
+  walk.note = '🚃 乗り物の区間として記録しています（歩いた距離には入れません）'; walk.noteUntil = last.t + 15000;
+}
+function vehStep(p, now, acc) {
+  const vt = walk.vt, d = distM(walk.last.p, p), dt = Math.max((now - walk.last.t) / 1000, 1);
+  if (d >= Math.max(8, acc * 0.5)) {
+    if (d / dt > VEH_V) {
+      walk.vFast = {p, t: now}; walk.sbuf = [];
+      if (distM(walk.vLast, p) >= VEH_PT_M) { pushPt(vt, p, now); walk.vLast = p; }
+      vt.t1 = now;
+    } else walk.sbuf.push({p, t: now});
+    walk.last = {p, t: now};
+  }
+  if (now - walk.vFast.t >= VEH_OFF_MS) { vehClose(); return true; }
+  return false;
+}
+function vehClose() {
+  const vt = walk.vt, f = walk.vFast; if (!vt) return;
+  if (f && distM(walk.vLast, f.p) > 1) pushPt(vt, f.p, f.t);
+  if (f) vt.t1 = f.t;
+  if (vt.pts.length < 2) tracks = tracks.filter(t => t !== vt);
+  walk.vt = null; walk.eRef = null;
+  // 遅くなってからの分は歩きに入れる（最初の1点は乗り物の区間とつながないので、距離に入れない）
+  let prev = null;
+  (walk.sbuf || []).forEach(x => { if (prev) walkAdd(prev, x.p, x.t); else pushPt(walk.track, x.p, x.t); prev = x; });
+  walk.sbuf = [];
+  walk.note = '🚶 歩きの記録に戻りました'; walk.noteUntil = Date.now() + 10000;
+  saveTracks(); afterTracksChanged();
+}
 function walkStep(c, t) {
   // 版20：アプリ版の裏の記録は、位置を取った時刻 t を使う（画面を消している間にまとめて届いても速さを正しく計算するため）
   const now = t || Date.now(), p = [c.longitude, c.latitude];
@@ -17,29 +78,31 @@ function walkStep(c, t) {
   if (c.accuracy > REC_M) { if (!walk.badSince) walk.badSince = now; }
   else walk.badSince = 0;
   walk.acc = c.accuracy;
+  let onFoot = false; // 歩いている（スタンプを調べてよい）
   if (c.accuracy <= REC_M) {
-    if (!walk.last) { walk.last = {p, t: now}; walk.track.pts.push(roundP(p)); }
+    if (!walk.last) { walk.last = {p, t: now}; pushPt(walk.track, p, now); onFoot = true; }
+    else if (walk.vt) onFoot = vehStep(p, now, c.accuracy);
     else {
       const d = distM(walk.last.p, p), dt = (now - walk.last.t) / 1000;
       if (d >= Math.max(8, c.accuracy * 0.5)) {
         const v = d / Math.max(dt, 1);
-        if (v <= 4) {
-          walk.dist += d;
-          walk.kcal += mets(v * 3.6) * weight() * dt / 3600 * 1.05;
-          walk.track.pts.push(roundP(p));
-          // 上った分のカロリー（標高タイルの高さで2m以上変わったら数える。体重1kgを1m持ち上げる≒0.0094kcal）
-          const eh = elevSync(p);
-          if (!isNaN(eh)) {
-            if (walk.eRef === null) walk.eRef = eh;
-            else if (eh - walk.eRef >= 2) { walk.up += eh - walk.eRef; walk.kcal += weight() * (eh - walk.eRef) * 0.0094; walk.eRef = eh; }
-            else if (walk.eRef - eh >= 2) walk.eRef = eh;
-          }
+        if (typeof BG !== 'undefined' && BG.on && dt > GAP_S && d > GAP_M) {
+          // 版21：裏の記録で位置が途切れていた（地下・トンネル）：線は引かず、距離にも入れない
+          walk.pend = []; pushPt(walk.track, p, now); walk.eRef = null;
+        } else if (v <= VEH_V) {
+          walk.pend = []; walkAdd(walk.last, p, now); onFoot = true;
+        } else {
+          // 速い：続いたら乗り物（それまでは記録に入れない）
+          if (!walk.pend || !walk.pend.length) { walk.pend = []; walk.pendFrom = walk.last; }
+          walk.pend.push({p, t: now});
+          let pd = 0, q = walk.pendFrom.p; walk.pend.forEach(x => { pd += distM(q, x.p); q = x.p; });
+          if (walk.pend.length >= VEH_ON_N || pd >= VEH_ON_M) vehOpen();
         }
         walk.last = {p, t: now};
-      }
+      } else onFoot = !(walk.pend && walk.pend.length);
     }
   }
-  if (c.accuracy <= REC_M) stampLive(p);
+  if (c.accuracy <= REC_M && onFoot) stampLive(p); // 版21：乗り物で通っただけの神社などはスタンプにしない
   walk.hist.push({t: now, d: walk.dist});
   while (walk.hist.length && walk.hist[0].t < now - 120000) walk.hist.shift();
   renderHud();
@@ -93,6 +156,7 @@ function renderHud() {
     `<div>${v === null ? '—' : (v * 3.6).toFixed(1)} km/h　${Math.round(walk.kcal)} kcal</div>` +
     `<div class="small" style="margin:0">歩行 ${fmtTime(el)}・${fmtDist(walk.dist)}</div>` +
     (meshHud() ? `<div class="small" style="margin:0;color:#b9770e">${meshHud()}</div>` : '') +
+    (walk.vt ? '<div class="small" style="margin:0;color:#7a5c8e">🚃 乗り物で移動中（歩いた距離に入れていません）</div>' : '') +
     (walk.askRR ? '<div style="margin:2px 0;padding:3px 6px;border-radius:6px;background:#fdecea;color:#c0392b;font-weight:bold">⚠ ルートを外れました。ここをタップして組み直す</div>' : '') +
     (walk.badSince && now - walk.badSince >= 10000 ? `<div class="small" style="margin:0;color:#c00">位置が粗いので記録を止めています（精度 約${fmtAcc(walk.acc)}）</div>` : '') +
     (walk.note && now < walk.noteUntil ? `<div class="small" style="margin:0;color:#1f6fd1">${walk.note}</div>` : '') +
@@ -129,7 +193,9 @@ window.addEventListener('pagehide', saveNow);
 window.addEventListener('beforeunload', e => { if (walk) { saveNow(); e.preventDefault(); e.returnValue = ''; } });
 function startWalk(prev) {
   walk = Object.assign({t0: Date.now(), dist: 0, kcal: 0, up: 0, track: null}, prev || {}, {eRef: null, last: null, hist: [], badSince: 0, acc: null});
-  if (!walk.track) { walk.track = {k: 'walk', t0: walk.t0, t1: walk.t0, kcal: 0, pts: []}; tracks.push(walk.track); }
+  // 版21：ts＝各点の時刻（秒）、ses＝この歩行の始まり（MeguMiru が歩いている途中の記録を見分ける）
+  walk.vt = null; walk.pend = []; walk.sbuf = [];
+  if (!walk.track) { walk.track = {k: 'walk', t0: walk.t0, t1: walk.t0, kcal: 0, pts: [], ts: [], ses: walk.t0}; tracks.push(walk.track); }
   document.body.classList.add('walking'); document.body.classList.remove('menu');
   $('menuBtn').textContent = '▲メニュー';
   $('result').textContent = '';
@@ -168,7 +234,7 @@ function restoreSession() {
     setData('route', line(route.coords)); updWalkBtn();
   }
   let track = tracks.find(t => t.k === 'walk' && t.t0 === s.t0);
-  if (!track) { track = {k: 'walk', t0: s.t0, t1: s.t0, kcal: 0, pts: []}; tracks.push(track); }
+  if (!track) { track = {k: 'walk', t0: s.t0, t1: s.t0, kcal: 0, pts: [], ts: [], ses: s.t0}; tracks.push(track); }
   startWalk({t0: s.t0, dist: s.dist, kcal: s.kcal, up: s.up || 0, track, note: '前回の歩行を続きから再開しました', noteUntil: Date.now() + 20000});
   status('前回の歩行を続きから再開しました');
 }
@@ -224,6 +290,7 @@ $('endBtn').onclick = () => {
   // 最後の書き出しから30日以上なら、控えを勧める
   const bk = Number(getLS('walk_bk_last')) || 0;
   if (Date.now() - bk >= 30 * 864e5) $('result').textContent += `　※${bk ? '最後の書き出しから30日以上たっています' : 'まだ記録を書き出していません'}。「歩いた記録の管理」の「全部まとめて書き出す」で控えを取りましょう`;
+  if (walk.vt) vehClose(); // 版21：乗り物の区間の途中で終わったら、そこで閉じる
   walk.track.t1 = Date.now(); walk.track.kcal = Math.round(walk.kcal * 10) / 10;
   if (walk.track.pts.length < 2) tracks = tracks.filter(t => t !== walk.track);
   saveTracks();
@@ -237,9 +304,81 @@ $('endBtn').onclick = () => {
 };
 
 // ---------- 歩いた記録（保存・表示） ----------
+// 版21：歩いた記録は大きな置き場（IndexedDB の 'michimiru' → 'kv' → 'tracks'）に置く
+// ・前の版までの localStorage 'walk_tracks' は、起動したときに一度だけ移して消す（移し終わったのを確かめてから）
+// ・保存したら localStorage 'walk_trk_rev' に時刻を書く（MeguMiru が「変わった」と気づくため）
+// ・IndexedDB が使えない端末では、今まで通り localStorage に置く
+const TRK = {idb: typeof indexedDB !== 'undefined', ready: false, saving: false, again: false, errAt: 0};
+function trkDb() {
+  return new Promise((res, rej) => {
+    const r = indexedDB.open('michimiru', 1);
+    r.onupgradeneeded = () => { if (!r.result.objectStoreNames.contains('kv')) r.result.createObjectStore('kv'); };
+    r.onsuccess = () => res(r.result); r.onerror = () => rej(r.error); r.onblocked = () => rej(new Error('blocked'));
+  });
+}
+async function trkDo(mode, fn) {
+  const db = await trkDb();
+  return new Promise((res, rej) => {
+    const tx = db.transaction('kv', mode), q = fn(tx.objectStore('kv'));
+    tx.oncomplete = () => { db.close(); res(q && q.result); };
+    tx.onerror = tx.onabort = () => { db.close(); rej(tx.error || new Error('abort')); };
+  });
+}
+function trkRev() { try { localStorage.setItem('walk_trk_rev', String(Date.now())); } catch (e) {} }
+// 同じ記録（始めた時刻・種類・最初の点）は1つに。点の多い方を残す（歩いている途中の記録はそのもの）
+function trkMerge(base, more) {
+  const map = new Map(); base.forEach(t => { if (t && Array.isArray(t.pts)) map.set(trackKey(t), t); });
+  (more || []).forEach(t => {
+    if (!t || !Array.isArray(t.pts)) return;
+    const k = trackKey(t), o = map.get(k);
+    if (!o) map.set(k, t);
+    else if (t.pts.length > o.pts.length && !(walk && (o === walk.track || o === walk.vt))) map.set(k, t);
+  });
+  return [...map.values()].sort((a, b) => (a.t0 || 0) - (b.t0 || 0));
+}
+async function trkLoad() {
+  if (!TRK.idb) { TRK.ready = true; return; }
+  let lsRaw = null, fromDb = null;
+  try { lsRaw = localStorage.getItem('walk_tracks'); } catch (e) {}
+  try { fromDb = await trkDo('readonly', st => st.get('tracks')); }
+  catch (e) { TRK.idb = false; TRK.ready = true; return; } // 使えない：今まで通り localStorage
+  const dbList = Array.isArray(fromDb) ? fromDb : [];
+  // tracks には、base.js が localStorage から読んだ分と、読み込みを待つ間に足した分が入っている
+  tracks = trkMerge(tracks, dbList);
+  TRK.ready = true;
+  if (lsRaw !== null || TRK.again || tracks.length !== dbList.length) {
+    try {
+      await trkDo('readwrite', st => st.put(tracks, 'tracks'));
+      const back = await trkDo('readonly', st => st.get('tracks'));
+      if (Array.isArray(back) && back.length === tracks.length && lsRaw !== null) {
+        try { localStorage.removeItem('walk_tracks'); } catch (e) {}
+        status(`歩いた記録 ${tracks.length}本を、大きな置き場に移しました`);
+      }
+      trkRev();
+    } catch (e) { TRK.idb = false; showErr('記録を大きな置き場に移せませんでした（' + jaErr(e) + '）。今まで通りの置き場を使います'); }
+  }
+  TRK.again = false;
+  // この記録を、端末の空きが少なくなっても消さないよう頼む（ブラウザが決める。断られても普通に使える）
+  try { if (navigator.storage && navigator.storage.persist) navigator.storage.persisted().then(p => p || navigator.storage.persist()).catch(() => {}); } catch (e) {}
+  afterTracksChanged();
+}
+async function trkWrite() {
+  if (TRK.saving) { TRK.again = true; return; }
+  TRK.saving = true;
+  try {
+    do { TRK.again = false; await trkDo('readwrite', st => st.put(tracks, 'tracks')); } while (TRK.again);
+    trkRev();
+  } catch (e) {
+    if (Date.now() - TRK.errAt > 600000) { TRK.errAt = Date.now(); showErr('記録の保存に失敗しました（' + jaErr(e) + '）。「全部まとめて書き出す」で控えを取ってください'); }
+  } finally { TRK.saving = false; }
+}
 function saveTracks() {
-  try { localStorage.setItem('walk_tracks', JSON.stringify(tracks)); return true; }
-  catch (e) { showErr('記録の保存に失敗しました。容量不足の可能性があります。「全部まとめて書き出す」で控えを取ってください'); return false; }
+  if (!TRK.idb) {
+    try { localStorage.setItem('walk_tracks', JSON.stringify(tracks)); trkRev(); return true; }
+    catch (e) { showErr('記録の保存に失敗しました。容量不足の可能性があります。「全部まとめて書き出す」で控えを取ってください'); return false; }
+  }
+  if (!TRK.ready) { TRK.again = true; return true; } // 読み込みが終わってからまとめて保存する（空の記録で上書きしない）
+  trkWrite(); return true;
 }
 function splitLines(pts, gap) {
   const out = []; let cur = [pts[0]];
@@ -302,7 +441,12 @@ function drawTracks() {
   const u = lsUsage(), pct = Math.round(u.all / LS_CAP * 100), mine = Math.round(u.mine / LS_CAP * 100);
   $('recStat').innerHTML = `保存済み：歩行 ${(lw / 1000).toFixed(1)}km${lo >= 50 ? `（道から外れた${(lo / 1000).toFixed(1)}kmは除く）` : ''}・乗り物 ${(lv / 1000).toFixed(1)}km` +
     (graph ? `<br>いま読み込んでいる範囲で歩いた道の長さ：${(lu / 1000).toFixed(1)}km（同じ道は1回と数える）` : '') +
-    `<br>この端末の保存場所（同じアドレスの4つのアプリで共有）：約${pct}%使用（うち MichiMiru ${mine}%）`;
+    (TRK.idb ? `<br>歩いた記録の置き場所：大きな置き場（IndexedDB）<span id="trkUse"></span>` : '') +
+    `<br>設定などの小さな置き場（同じアドレスのアプリで共有）：約${pct}%使用（うち MichiMiru ${mine}%）`;
+  // 版21：大きな置き場の使っている量（ブラウザが答える目安。道のデータなども含む）
+  if (TRK.idb && navigator.storage && navigator.storage.estimate) navigator.storage.estimate().then(e => {
+    const el = $('trkUse'); if (el && e && e.usage) el.textContent = `・この端末で使っている量 約${(e.usage / 1e6).toFixed(1)}MB`;
+  }).catch(() => {});
   if (pct >= 80) showErr('この端末の保存場所が残り少なくなっています。「全部まとめて書き出す」で控えを取ってください');
   updBkLast();
   updPlay(cleaned);
@@ -349,7 +493,8 @@ function dropDup(parts) {
   if (!sp.length) return 0;
   const cur = walk && walk.track, before = tracks.length;
   tracks = tracks.filter(t => {
-    if (t.src || t.k === 'veh' || t === cur) return true;
+    // 版21：アプリが記録した乗り物の区間（src:'app'）も、GPX と重なれば消す
+    if ((t.src && t.src !== 'app') || (t.k === 'veh' && t.src !== 'app') || t === cur || (walk && t === walk.vt)) return true;
     if (t.t1 > t.t0) { // 時間の半分以上がGPXと重なっていたら同じ散歩とみなす
       const ov = sp.reduce((s, [a, b]) => s + Math.max(0, Math.min(b, t.t1) - Math.max(a, t.t0)), 0);
       return ov < (t.t1 - t.t0) * 0.5;
@@ -502,6 +647,8 @@ function applyBackup(b) {
     if (typeof t.t1 === 'number') o.t1 = t.t1;
     if (typeof t.kcal === 'number') o.kcal = t.kcal;
     if (t.mode === 'train' || t.mode === 'car') o.mode = t.mode;
+    if (Array.isArray(t.ts) && t.ts.length === t.pts.length) o.ts = t.ts; // 版21：各点の時刻
+    if (typeof t.ses === 'number') o.ses = t.ses;
     tracks.push(o); have.add(trackKey(t)); n++;
   });
   // スタンプ帳も合わせる（行った日は両方の分を足す）
