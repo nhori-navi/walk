@@ -1,0 +1,78 @@
+# MichiMiru の Android アプリ（APK）を作る
+# ・app/build.mjs か、このファイルを保存したときに自動で動く（Actions タブの「Run workflow」でも動かせる）
+# ・できた APK は Releases の「app」に置く：https://github.com/nhori-navi/walk/releases/download/app/MichiMiru.apk
+# ・署名の鍵は Settings → Secrets and variables → Actions の MICHI_KEYSTORE（毎回同じ鍵でないと上書きで入れられない）
+name: アプリ（APK）を作る
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - 'app/**'
+      - '.github/workflows/apk.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    steps:
+      - name: ファイルを取り出す
+        uses: actions/checkout@v4
+
+      - name: Node を用意
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Java を用意
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 21
+
+      - name: 署名の鍵を置く
+        env:
+          KEY: ${{ secrets.MICHI_KEYSTORE }}
+        run: |
+          if [ -z "$KEY" ]; then
+            echo "::error::署名の鍵（MICHI_KEYSTORE）が登録されていません。Settings → Secrets and variables → Actions で登録してから、もう一度動かしてください"
+            exit 1
+          fi
+          mkdir -p ~/.android
+          echo "$KEY" | tr -d ' \r\n' | base64 -d > ~/.android/debug.keystore
+          keytool -list -keystore ~/.android/debug.keystore -storepass android > /dev/null
+
+      - name: アプリの部品を入れる
+        working-directory: app
+        run: |
+          node build.mjs setup
+          npm install --no-audit --no-fund
+
+      - name: Android のひな形を作る
+        working-directory: app
+        env:
+          RUN_NO: ${{ github.run_number }}
+        run: |
+          npx cap add android
+          node build.mjs android
+
+      - name: APK を作る
+        working-directory: app/android
+        run: ./gradlew assembleDebug --no-daemon --stacktrace
+
+      - name: できた APK を Releases に置く
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          cp app/android/app/build/outputs/apk/debug/app-debug.apk MichiMiru.apk
+          ls -l MichiMiru.apk
+          if ! gh release view app --repo "$GITHUB_REPOSITORY" > /dev/null 2>&1; then
+            gh release create app --repo "$GITHUB_REPOSITORY" --title "MichiMiru アプリ版（Android）" \
+              --notes "スマホでこのページの MichiMiru.apk を押してダウンロードし、開いて入れます。作り直すたびに新しいものに置き換わります。"
+          fi
+          gh release upload app MichiMiru.apk --clobber --repo "$GITHUB_REPOSITORY"
+          echo "### できあがり：版 1.${{ github.run_number }}" >> "$GITHUB_STEP_SUMMARY"
+          echo "https://github.com/$GITHUB_REPOSITORY/releases/download/app/MichiMiru.apk" >> "$GITHUB_STEP_SUMMARY"
