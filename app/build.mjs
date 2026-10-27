@@ -116,6 +116,13 @@ async function android() {
   const bg = path.join(HERE, 'android', 'app', 'build.gradle');
   let g = fs.readFileSync(bg, 'utf8');
   g = g.replace(/versionCode \d+/, 'versionCode ' + run).replace(/versionName "[^"]*"/, `versionName "1.${run}"`);
+  // 版22.1：署名の鍵をはっきり指定する（指定しないと、作るたびに別の鍵で署名されて上書きで入れられないことがあった）
+  // 鍵は Actions が Secrets の MICHI_KEYSTORE から置く（MICHI_KS の場所。PKCS12・別名 androiddebugkey・パスワード android）
+  const home = (process.env.HOME || ''), dbg = home + '/.android/debug.keystore';
+  const ks = (process.env.MICHI_KS || (home && fs.existsSync(dbg) ? dbg : '')).replace(/\\/g, '/'); // 古い apk.yml（debug.keystore に置く）でも同じ鍵
+  if (ks && !g.includes('MICHI_KS')) {
+    g = g.replace(/android \{\n/, `android {\n    // MICHI_KS：決まった鍵で署名する\n    signingConfigs {\n        debug {\n            storeFile file("${ks}")\n            storeType "pkcs12"\n            storePassword "android"\n            keyAlias "androiddebugkey"\n            keyPassword "android"\n        }\n    }\n`);
+  }
   fs.writeFileSync(bg, g);
   console.log('android：アイコン・通知の絵・起動画面・番号（' + run + '）を入れました');
 }
