@@ -1,6 +1,7 @@
 // MichiMiru：版20〜 Android アプリ版（Capacitor）で開いたときだけ動く部分
 // 版21：MeguMiru を重ねて開く・戻るボタン。版22：TenMiru・YamaMiru も重ねて開く、スマホの通知（ISS の予約・散歩中の上空の見張り）
 // 版23：重ねて開いている間の「戻る帯」（画面の上）、地図の右の ▦ にまとめた、MeguMiru に MichiMiru の位置を渡す
+// 版24：▦ の枠と戻る帯に、それぞれのアプリの版（GitHub に新しい版が出ていれば知らせる）
 // ・歩いている間は「裏の記録」（BackgroundGeolocation）で位置を受け取り、いつもの記録（walkStep）に入れる
 //   → 画面を消してポケットに入れても記録が続く。記録中は通知欄に「MichiMiru 記録中」
 // ・書き出しはスマホの「Documents（ドキュメント）」フォルダーに保存（アプリの中ではダウンロードが使えないため）
@@ -113,9 +114,9 @@ function nativeSaveFile(name, data, done) {
 // 同じアドレス（nhori-navi.github.io）なので、置き場も共通。戻るのは、それぞれの「🚶」かスマホの「戻る」
 // keep：閉じても残して裏で動かす（MeguMiru は集め続ける）。TenMiru・YamaMiru は閉じたら止める（カメラ・通信・電池）
 const OV = {
-  megu: {path: '../megu/', btn: 'Megu', icon: '🗾', sub: '行った場所を集める', title: 'MeguMiru', color: '#7a5c8e', bg: '#f6f3f8', keep: true},
-  sora: {path: '../sora/', btn: 'Ten', icon: '✈️', sub: '見上げた空の飛行機・星', title: 'TenMiru', color: '#1f6fd1', bg: '#eef3fb', keep: false},
-  yama: {path: '../yama/', btn: 'Yama', icon: '🏔', sub: '見えている山の名前', title: 'YamaMiru', color: '#2e7d32', bg: '#f3f7f1', keep: false}
+  megu: {vf: 'js/base.js', vr: /APP_VER *= *(\d+)/, vv: 'APP_VER', vp: '版', path: '../megu/', btn: 'Megu', icon: '🗾', sub: '行った場所を集める', title: 'MeguMiru', color: '#7a5c8e', bg: '#f6f3f8', keep: true},
+  sora: {vf: 'index.html', vr: /SORA_V *= *(\d+)/, vv: 'SORA_V', vp: 'v', path: '../sora/', btn: 'Ten', icon: '✈️', sub: '見上げた空の飛行機・星', title: 'TenMiru', color: '#1f6fd1', bg: '#eef3fb', keep: false},
+  yama: {vf: 'index.html', vr: /YAMA_V *= *(\d+)/, vv: 'YAMA_V', vp: '版', path: '../yama/', btn: 'Yama', icon: '🏔', sub: '見えている山の名前', title: 'YamaMiru', color: '#2e7d32', bg: '#f3f7f1', keep: false}
 };
 const ovFrames = {};
 let ovCur = '';
@@ -132,7 +133,10 @@ function ovStyle() {
     '#appsBox button{display:flex;align-items:center;gap:10px;width:100%;margin:0;padding:8px 10px;min-height:54px;border:0;border-left:6px solid var(--c);border-radius:10px;background:transparent;text-align:left;color:#1d2b22}' +
     '#appsBox button+button{margin-top:4px}#appsBox .ic{font-size:26px}#appsBox b{display:block;font-size:16px}#appsBox small{display:block;font-size:12px;color:#5b6b61}' +
     'body.dark #appsBox{background:#28322e;box-shadow:0 4px 18px rgba(0,0,0,.6)}body.dark #appsBox button{color:#f1f5f2}body.dark #appsBox small{color:#c9d3cd}' +
-    'body.mode-tk #appsBox,body.mode-tabi #appsBox{display:none}';
+    'body.mode-tk #appsBox,body.mode-tabi #appsBox{display:none}' +
+    '#appsBox .vr{margin-left:auto;align-self:flex-start;font-size:12px;color:#7a867f;white-space:nowrap;padding-top:3px}#appsBox .nw{display:block;font-size:12px;color:#d35400;font-weight:bold}' +
+    '#appsVer{font-size:12px;color:#7a867f;padding:6px 10px 2px;border-top:1px solid #e3e8e5;margin-top:4px}body.dark #appsVer{border-color:#3d4a44;color:#aab6af}body.dark #appsBox .vr{color:#aab6af}body.dark #appsBox .nw{color:#ffb347}' +
+    '#ovStrip .sv{font-size:11px;font-weight:normal;opacity:.75;white-space:nowrap}';
   document.head.appendChild(st);
 }
 function ovOpen(id) {
@@ -146,6 +150,7 @@ function ovOpen(id) {
     f.className = 'ovFrame'; f.title = o.title; f.style.background = o.bg;
     f.allow = 'geolocation; camera; screen-wake-lock; accelerometer; gyroscope; magnetometer; fullscreen';
     f.src = new URL(o.path, location.href).href + '?inapp=1';
+    f.addEventListener('load', () => { verRun(id); setTimeout(() => verRun(id), 3000); });
     document.body.appendChild(f); ovFrames[id] = f;
   }
   if (ovCur === id) return;
@@ -182,10 +187,11 @@ function stripUpd() {
   let s = $('ovStrip');
   if (!s) {
     s = document.createElement('button'); s.id = 'ovStrip'; s.type = 'button'; s.title = 'MichiMiru に戻る';
-    s.innerHTML = '<span class="bk">◀ MichiMiru に戻る</span><span class="st"></span>';
+    s.innerHTML = '<span class="bk">◀ MichiMiru に戻る</span><span class="sv"></span><span class="st"></span>';
     s.onclick = () => ovClose(false);
     document.body.appendChild(s);
   }
+  const vr = ovCur && verGet()[ovCur]; s.querySelector('.sv').textContent = vr ? verFmt(ovCur, vr) : '';
   s.querySelector('.st').textContent = !walk ? '記録していません'
     : walk.vt ? `🚃 乗り物で移動中・${fmtDur(Date.now() - walk.t0)}`
     : `● 記録中 ${fmtDist(walk.dist || 0)}・${fmtDur(Date.now() - walk.t0)}`;
@@ -207,13 +213,46 @@ function ovPos(p) {
   for (let i = POSL.length - 1; i >= 0; i--) { try { POSL[i](q); } catch (e) { POSL.splice(i, 1); } } // 消えた画面の分は外す
 }
 
+// ---------- 版24：それぞれのアプリの版 ----------
+// 動いている版：重ねて開いたときに、そのアプリの画面から読み取って walk_appver に覚える（開いたことのないアプリは分からない）
+// GitHub の版：▦ を開いたときに（5分に1回まで）それぞれのファイルを取って読む。動いている版より新しければ知らせる
+const VER = {latest: {}, at: 0};
+const verGet = () => { try { return JSON.parse(getLS('walk_appver') || '{}') || {}; } catch (e) { return {}; } };
+const verFmt = (id, n) => (id === 'walk' ? '版' : OV[id].vp) + n;
+function verRun(id) {
+  try {
+    const w = ovFrames[id] && ovFrames[id].contentWindow; if (!w) return;
+    const n = Number(w.eval(`typeof ${OV[id].vv} !== 'undefined' ? ${OV[id].vv} : 0`));
+    if (n > 0) { const v = verGet(); if (v[id] !== n) { v[id] = n; lsSet('walk_appver', JSON.stringify(v)); } if (ovCur === id) stripUpd(); }
+  } catch (e) {}
+}
+async function verLatest() {
+  if (Date.now() - VER.at < 300000) return;
+  VER.at = Date.now();
+  const get = async (url, re) => { try { const r = await fetch(url + (url.includes('?') ? '&' : '?') + 'vchk=' + Date.now(), {cache: 'no-store'}); if (!r.ok) return 0; const m = re.exec(await r.text()); return m ? Number(m[1]) : 0; } catch (e) { return 0; } };
+  const jobs = Object.entries(OV).map(async ([k, o]) => { VER.latest[k] = await get(new URL(o.path + o.vf, location.href).href, o.vr); });
+  jobs.push(get(new URL('config.js', location.href).href, /APP_VER *= *(\d+)/).then(n => { VER.latest.walk = n; }));
+  await Promise.all(jobs);
+}
+function verShow() {
+  const v = verGet();
+  Object.keys(OV).forEach(k => {
+    const run = v[k] || 0, lat = VER.latest[k] || 0, e = $('vr_' + k), nw = $('nw_' + k);
+    if (e) e.textContent = run ? verFmt(k, run) : lat ? verFmt(k, lat) : '';
+    if (nw) { nw.textContent = run && lat > run ? `${verFmt(k, lat)} が出ています（アプリを開き直すと入ります）` : ''; nw.style.display = nw.textContent ? '' : 'none'; }
+  });
+  const av = $('appsVer');
+  if (av) av.textContent = `MichiMiru ${verFmt('walk', APP_VER)}` + ((VER.latest.walk || 0) > APP_VER ? `（${verFmt('walk', VER.latest.walk)} が出ています。アプリを開き直すと入ります）` : '');
+}
+
 // ---------- 版23：地図の右の ▦（重ねて開くアプリをまとめた） ----------
 function appsClose() { const bx = $('appsBox'); if (bx) bx.classList.remove('on'); const b = $('mApps'); if (b) b.classList.remove('on'); }
 function appsSetup() {
   const b = document.createElement('button'); b.id = 'mApps'; b.title = 'ほかのアプリを重ねて開く'; b.textContent = '▦';
   $('mapBtns').appendChild(b);
   const bx = document.createElement('div'); bx.id = 'appsBox';
-  bx.innerHTML = Object.entries(OV).map(([k, o]) => `<button id="ov_${k}" type="button" style="--c:${o.color}"><span class="ic">${o.icon}</span><span><b>${o.title}</b><small>${o.sub}</small></span></button>`).join('');
+  bx.innerHTML = Object.entries(OV).map(([k, o]) => `<button id="ov_${k}" type="button" style="--c:${o.color}"><span class="ic">${o.icon}</span><span><b>${o.title}</b><small>${o.sub}</small><span class="nw" id="nw_${k}" style="display:none"></span></span><span class="vr" id="vr_${k}"></span></button>`).join('') +
+    '<div id="appsVer"></div>';
   $('mapBtns').parentNode.appendChild(bx);
   Object.keys(OV).forEach(k => { $('ov_' + k).onclick = e => { e.stopPropagation(); ovOpen(k); }; });
   b.onclick = e => {
@@ -224,7 +263,8 @@ function appsSetup() {
     }
     bx.classList.toggle('on', open); b.classList.toggle('on', open);
     // 枠の下の端を ▦ の下の端にそろえて、上に向かって開く（下のパネルに重ならないように）
-    if (open) bx.style.top = Math.max(8, $('mapBtns').offsetTop + b.offsetTop + b.offsetHeight - bx.offsetHeight) + 'px';
+    const place = () => { bx.style.top = Math.max(8, $('mapBtns').offsetTop + b.offsetTop + b.offsetHeight - bx.offsetHeight) + 'px'; };
+    if (open) { verShow(); place(); verLatest().then(() => { verShow(); place(); }); }
   };
   document.addEventListener('pointerdown', e => { if (bx.classList.contains('on') && !bx.contains(e.target) && e.target !== b) appsClose(); }, true);
 }

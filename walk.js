@@ -595,12 +595,16 @@ function updBkLast() {
   $('bkLast').textContent = `最後に書き出した日：${ymd(t).replace(/-/g, '/')}（${days ? days + '日前' : '今日'}）`;
   $('bkLast').style.color = days >= 30 ? '#c0392b' : '';
 }
-$('recExport').onclick = () => {
-  saveNow();
+// 版24：書き出す中身（4つのアプリの控え〔hikae.js〕でも使う）
+function bkObj() {
   const set = {};
   BK_SET.concat(BK_TK).forEach(k => { const v = getLS(k); if (v !== null) set[k] = v; });
+  return {app: 'MichiMiru', kind: 'all', v: 2, t: Date.now(), data: {tracks, stamps, favs, set, meshdone: meshDone}};
+}
+$('recExport').onclick = () => {
+  saveNow();
   const d = new Date();
-  const txt = JSON.stringify({app: 'MichiMiru', kind: 'all', v: 2, t: Date.now(), data: {tracks, stamps, favs, set, meshdone: meshDone}});
+  const txt = JSON.stringify(bkObj());
   const name = `michimiru-kiroku-${ymdNum(d)}.json`;
   // 版20：アプリ版はダウンロードが使えないので、Documents フォルダーに保存する
   if (typeof nativeSaveFile === 'function' && nativeSaveFile(name, txt)) { lsSet('walk_bk_last', String(Date.now())); updBkLast(); return; }
