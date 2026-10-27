@@ -132,11 +132,13 @@ function tkDraw(d, fly) {
   tkHere = here;
   if (!tkMarker) { const el = document.createElement('div'); el.className = 'tkme'; el.textContent = '🚶'; tkMarker = new mapboxgl.Marker({element: el}); }
   tkMarker.setLngLat(here).addTo(map);
-  if (fly) map.jumpTo({center: here, zoom: 13});
+  if (fly) { const wait = Math.max(0, 1200 - (Date.now() - tkOpenAt)); setTimeout(() => { if (tkOn()) map.flyTo({center: here, zoom: 13, duration: 2000}); }, wait); } // 版27：引いてから寄る
   const nx = TOKAIDO[w.i + 1], ng = d.secs.filter(s => !s.ok).length - 1; // 七里の渡しは数えない
   const ll = `${here[1].toFixed(6)},${here[0].toFixed(6)}`;
   // 帯の1行：「🏯 品川宿＋8.1km・川崎宿まで 1.7km」。詳しいことは ⓘ の中
-  mbSet(`🏯 ${w.lap ? `${w.lap + 1}周目・` : ''}${esc(TOKAIDO[w.i][0])}＋${(w.r - TOKAIDO[w.i][1]).toFixed(1)}km・${esc(nx[0])}まで ${(nx[1] - w.r).toFixed(1)}km`,
+  const failed = ng >= d.secs.length - 1;
+  mbSet(`🏯 ${w.lap ? `${w.lap + 1}周目・` : ''}${esc(TOKAIDO[w.i][0])}＋${(w.r - TOKAIDO[w.i][1]).toFixed(1)}km・${esc(nx[0])}まで ${(nx[1] - w.r).toFixed(1)}km` + (failed ? '（道筋が取れず直線）' : ''),
+    (failed ? '<button id="tkRetry" type="button" class="primary" style="margin:0 0 6px">↻ 旧東海道の道筋を取り直す</button><br>' : '') +
     `${w.i === 0 ? '日本橋を出発して' : esc(TOKAIDO[w.i][0]) + 'を過ぎて'} ${(w.r - TOKAIDO[w.i][1]).toFixed(1)}km（${esc(nx[0])}まで あと ${(nx[1] - w.r).toFixed(1)}km）。全行程 ${w.r.toFixed(1)}km／${TK_LEN}km` +
     (w.lap ? `（京都に${w.lap}回着きました）` : '') + '<br>' +
     (w.i === TK_SEA ? '宮宿から桑名宿までは「七里の渡し」（船）で海の上を進みます。<br>' : '') +
@@ -144,12 +146,21 @@ function tkDraw(d, fly) {
       : ng > 0 ? `道筋：OpenStreetMap の旧東海道（${ng}区間は道筋が分からず、宿場どうしを点線で結んでいます）。` : '道筋：OpenStreetMap の旧東海道。') +
     `<br><a target="_blank" rel="noopener" href="https://www.google.com/maps/@?api=1&map_action=pano&viewpoint=${ll}">ストリートビューで見る</a>　` +
     `<a target="_blank" rel="noopener" href="https://www.google.com/maps/search/?api=1&query=${ll}">Googleマップで見る</a>`);
+  if (failed) $('mbar').classList.add('open'); // 取れなかったときは ⓘ を開いて「取り直す」を見せる
+  const rb = $('tkRetry'); if (rb) rb.onclick = e => { e.stopPropagation(); tkData = null; modeClose(); tkOpen(); }; // 版27：取れなかったら、もう一度
 }
+// 版27：押したらすぐ地図を切り替えて、日本橋〜京都の全体まで引いてから、今の位置へ寄る（旅の地図と同じ引きの動き）。
+// 初めの1回は道筋を取ってくるので、準備中をはっきり出す。準備中にもう一度押したら、待っていることを知らせる
+let tkBusy = false, tkOpenAt = 0;
 async function tkOpen() {
+  if (mapMode === 'tk') { status(tkBusy ? '⏳ 旧東海道の道筋を取ってきています。もう少しお待ちください' : '東海道の地図を開いています（閉じるのは下の帯の ✕）'); return; }
   if (!modeOpen('tk', tkClear)) return;
-  mbSet('🏯 東海道の地図を準備中…', '');
-  const d = await tkLoad();
-  if (tkOn()) tkDraw(d, true);
+  tkOpenAt = Date.now();
+  try { let w = 180, s = 90, e = -180, n = -90; TK_POS.forEach(p => { w = Math.min(w, p[0]); e = Math.max(e, p[0]); s = Math.min(s, p[1]); n = Math.max(n, p[1]); }); map.fitBounds([[w, s], [e, n]], {padding: 30, duration: 1000}); } catch (e) {}
+  if (!tkData) { mbSet('🏯 ⏳ 東海道の地図を準備中…', ''); status('⏳ 東海道の地図を準備中…（初めの1回は旧東海道の道筋を取ってくるので、1〜2分かかることがあります）'); }
+  tkBusy = true;
+  let d; try { d = await tkLoad(); } finally { tkBusy = false; }
+  if (tkOn()) { if (/東海道の地図を準備中|旧東海道の道筋を取ってきています/.test($('status').textContent)) status(''); tkDraw(d, true); }
 }
 function tkClear() {
   setData('tkLine', []); setData('tkSt', []);

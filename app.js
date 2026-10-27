@@ -285,6 +285,7 @@ function onPos(p) {
   updateRemain();
   if (typeof tripOnPos === 'function') tripOnPos(); // 版14：降りる駅に着いたら、目的地までのルートに切り替える
   if (typeof ovPos === 'function') ovPos(p);        // 版23：アプリ版で重ねたアプリ（MeguMiru）に位置を渡す
+  if (typeof meguNearCheck === 'function') meguNearCheck(p); // 版27：近くのまだ行っていない場所（MeguMiru）を通知
 }
 document.addEventListener('visibilitychange', () => {
   if (document.visibilityState === 'visible' && 'geolocation' in navigator)
