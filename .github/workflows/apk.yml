@@ -42,8 +42,9 @@ jobs:
             exit 1
           fi
           mkdir -p ~/.android
-          echo "$KEY" | tr -d ' \r\n' | base64 -d > ~/.android/debug.keystore
-          keytool -list -keystore ~/.android/debug.keystore -storepass android > /dev/null
+          echo "$KEY" | tr -d ' \r\n' | base64 -d > ~/.android/michi.keystore
+          keytool -list -keystore ~/.android/michi.keystore -storepass android > /dev/null
+          echo "MICHI_KS=$HOME/.android/michi.keystore" >> "$GITHUB_ENV"
 
       - name: アプリの部品を入れる
         working-directory: app
@@ -62,6 +63,19 @@ jobs:
       - name: APK を作る
         working-directory: app/android
         run: ./gradlew assembleDebug --no-daemon --stacktrace
+
+      - name: 決まった鍵で署名されたか確かめる
+        run: |
+          APK=app/android/app/build/outputs/apk/debug/app-debug.apk
+          SIGNER=$(ls -d "$ANDROID_HOME"/build-tools/*/ | sort -V | tail -1)apksigner
+          GOT=$("$SIGNER" verify --print-certs "$APK" | grep -i 'SHA-256 digest' | head -1 | awk '{print $NF}' | tr -d ':' | tr 'A-F' 'a-f')
+          WANT=$(keytool -list -v -keystore "$MICHI_KS" -storepass android -alias androiddebugkey | grep 'SHA256:' | head -1 | awk '{print $NF}' | tr -d ':' | tr 'A-F' 'a-f')
+          echo "APK の鍵：$GOT"
+          echo "決まった鍵：$WANT"
+          if [ -z "$GOT" ] || [ "$GOT" != "$WANT" ]; then
+            echo "::error::APK が決まった鍵で署名されていません。上書きで入れられないので Releases には置きません"
+            exit 1
+          fi
 
       - name: できた APK を Releases に置く
         env:
