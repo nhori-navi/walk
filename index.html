@@ -239,7 +239,7 @@ body.walking.menu #panel{display:block;top:50%;bottom:52px;left:0;right:0;width:
       <label class="sw"><span class="swt">歩いた道（緑）</span><input type="checkbox" id="walkedChk" checked></label>
       <label class="sw"><span class="swt">乗り物の区間（赤）</span><input type="checkbox" id="vehChk"></label>
       <label class="sw"><span class="swt">神社・寺・公園<small>印をタップすると名前</small></span><input type="checkbox" id="poiShow"></label>
-      <label class="sw"><span class="swt">比較用の Mapbox の徒歩ルート（点線）<small>入にすると、出発地・経由地・目的地の座標を Mapbox 社に送ります</small></span><input type="checkbox" id="cmpChk"></label>
+      <label class="sw"><span class="swt">ほかの地図の徒歩ルートも点線で出す（比べる用）<small>入にすると、出発地・経由地・目的地の座標を Mapbox 社に送ります</small></span><input type="checkbox" id="cmpChk"></label>
       <label class="sw"><span class="swt">道から外れた記録も薄く<small>GPS のずれなど。距離には入れていません</small></span><input type="checkbox" id="offChk"></label>
       <label class="sw"><span class="swt">道のデータ<small><span class="lg" style="background:#8a9a9a"></span>通れる<span class="lg" style="background:#f39c12"></span>階段<span class="lg" style="background:#9b59b6"></span>つながっていない<span class="lg" style="background:#e74c3c"></span>通行不可</small></span><input type="checkbox" id="netChk"></label>
     </div>
@@ -287,18 +287,18 @@ window.addEventListener('error', e => {
   if (el) el.textContent = el.textContent ? el.textContent + ' ／ ' + m : m;
 }, true);
 </script>
-<script src="config.js?v=22"></script>
-<script src="base.js?v=22"></script>
-<script src="road.js?v=22"></script>
-<script src="poi.js?v=22"></script>
-<script src="walk.js?v=22"></script>
-<script src="play.js?v=22"></script>
-<script src="tokaido.js?v=22"></script>
-<script src="tabi.js?v=22"></script>
-<script src="app.js?v=22"></script>
-<script src="train.js?v=22"></script>
-<script src="ui.js?v=22"></script>
-<script src="help.js?v=22"></script>
-<script src="native.js?v=22"></script>
+<script src="config.js?v=23"></script>
+<script src="base.js?v=23"></script>
+<script src="road.js?v=23"></script>
+<script src="poi.js?v=23"></script>
+<script src="walk.js?v=23"></script>
+<script src="play.js?v=23"></script>
+<script src="tokaido.js?v=23"></script>
+<script src="tabi.js?v=23"></script>
+<script src="app.js?v=23"></script>
+<script src="train.js?v=23"></script>
+<script src="ui.js?v=23"></script>
+<script src="help.js?v=23"></script>
+<script src="native.js?v=23"></script>
 </body>
 </html>
