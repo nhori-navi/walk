@@ -98,6 +98,8 @@ body.walking #walkBtn,body.walking #walkBtn + .qb{display:none}
 body.walking #map{bottom:64px}
 /* 版12：歩行中の案内（矢印を大きく） */
 #hud{max-width:calc(100% - 76px)}
+#hud.mini{padding:4px 8px}#hud .mid{font-size:16px;font-weight:bold;white-space:nowrap}#hud .mid .more{font-size:11px;color:#888;margin-left:6px;font-weight:normal}
+body.dark #hud .mid .more{color:#aab6af}
 #hud .turn{display:flex;align-items:center;gap:8px;margin:0 0 4px;padding:3px 10px 3px 4px;border-radius:10px;background:#fdecea;color:#c0392b;font-size:15px;font-weight:normal}
 #hud .turn .tar{font-size:48px;line-height:1;min-width:54px;text-align:center;font-weight:bold}
 #hud .turn .ttx{line-height:1.25}

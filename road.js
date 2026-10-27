@@ -199,9 +199,10 @@ function buildGraph(els) {
   return {lon, lat, adj, comp, main, ways, edges, emap, floatN};
 }
 // 版10：e.k＝歩いたことがある、e.k0＝今日より前に歩いたことがある（今日の未踏破＝k があって k0 がない道）
-function markWalked(g) {
+// 版25：cut を渡すと「その時刻より前の記録」を k0 にする（散歩のまとめの「はじめて歩いた道」）。渡さなければ今日の0時
+function markWalked(g, cut) {
   g.edges.forEach(e => { e.k = 0; e.k0 = 0; }); g.wIdx = null;
-  const d0 = new Date(); d0.setHours(0, 0, 0, 0);
+  const d0 = cut ? new Date(cut) : new Date(); if (!cut) d0.setHours(0, 0, 0, 0);
   const bb = g.bb, kx = Math.cos((bb.s + bb.n) / 2 * Math.PI / 180) * 111320, ky = 110540, C = 40;
   const cell = p => [Math.floor((p[0] - bb.w) * kx / C), Math.floor((p[1] - bb.s) * ky / C)];
   const inBB = p => p[0] >= bb.w && p[0] <= bb.e && p[1] >= bb.s && p[1] <= bb.n;

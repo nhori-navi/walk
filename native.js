@@ -2,6 +2,7 @@
 // 版21：MeguMiru を重ねて開く・戻るボタン。版22：TenMiru・YamaMiru も重ねて開く、スマホの通知（ISS の予約・散歩中の上空の見張り）
 // 版23：重ねて開いている間の「戻る帯」（画面の上）、地図の右の ▦ にまとめた、MeguMiru に MichiMiru の位置を渡す
 // 版24：▦ の枠と戻る帯に、それぞれのアプリの版（GitHub に新しい版が出ていれば知らせる）
+// 版25：散歩中に知らせた飛行機を walk_skylog に残す（散歩のまとめに出す）。版23 の fmtDist（base.js と同じ名前）を外した
 // ・歩いている間は「裏の記録」（BackgroundGeolocation）で位置を受け取り、いつもの記録（walkStep）に入れる
 //   → 画面を消してポケットに入れても記録が続く。記録中は通知欄に「MichiMiru 記録中」
 // ・書き出しはスマホの「Documents（ドキュメント）」フォルダーに保存（アプリの中ではダウンロードが使えないため）
@@ -181,7 +182,6 @@ window.meguClose = window.miruClose;
 // ---------- 版23：戻る帯（重ねて開いている間だけ、画面のいちばん上） ----------
 // 重ねたアプリ（MeguMiru 版17・TenMiru v41・YamaMiru 版13）は miruStrip を見て、自分の 🚶 を出さない
 window.miruStrip = true;
-function fmtDist(m) { return m < 1000 ? Math.round(m) + 'm' : (m / 1000).toFixed(1) + 'km'; }
 function fmtDur(ms) { const m = Math.max(0, Math.round(ms / 60000)); return m < 60 ? m + '分' : Math.floor(m / 60) + '時間' + (m % 60 ? (m % 60) + '分' : ''); }
 function stripUpd() {
   let s = $('ovStrip');
@@ -387,14 +387,24 @@ async function skyCheck() {
       if (wantMil && (a.dbFlags & 1) && !SKY.sent.has('m' + a.hex)) {
         SKY.sent.add('m' + a.hex); SKY.n++;
         ntNow('🛩 軍用機が近くにいます', `${type}（${dir8(dir)} ${dist.toFixed(0)}km）`, {ov: 'sora'});
+        skyLog('mil', cs, type);
       }
       const over = (cpaT != null && cpaT > 0 && cpaT <= win && cpaKm <= 3) || dist <= 2;
       if (wantOver && over && !SKY.sent.has('o' + a.hex)) {
         SKY.sent.add('o' + a.hex); SKY.n++;
         ntNow('✈ まもなく真上付近を通ります', `${cs ? cs + '・' : ''}${type}（いま${dir8(dir)} ${dist.toFixed(1)}km）`, {ov: 'sora'});
+        skyLog('over', cs, type);
       }
     });
   } finally { SKY.busy = false; if (document.visibilityState === 'visible') appCard(); }
+}
+// 版25：知らせた飛行機を残す（新しい100件。散歩のまとめが時刻で拾う）
+function skyLog(k, cs, ty) {
+  try {
+    const a = JSON.parse(getLS('walk_skylog') || '[]') || [];
+    a.push({t: Date.now(), k, cs, ty, p: pos ? [+pos[0].toFixed(5), +pos[1].toFixed(5)] : null});
+    lsSet('walk_skylog', JSON.stringify(a.slice(-100)));
+  } catch (e) {}
 }
 // 通知を押してアプリが開いたら、その通知のアプリ（TenMiru）を重ねて開く
 function ntTapSetup() {

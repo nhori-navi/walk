@@ -147,6 +147,20 @@ function renderHud() {
   else if (!e && el > 60) v = 0;
   const pace = (el < 120 || walk.dist < 100) ? SPEED / 60 : Math.max(0.3, walk.dist / el);
   let top = '';
+  // 版25：ふだんは小さく（残りと到着の1行＋曲がり角の案内＋注意）。カードを押すと詳しく（もう一度で小さく）
+  const full = getLS('walk_hudfull') === '1', alerts = hudAlerts(now);
+  if (!full) {
+    let line;
+    if (lastRemain === null) line = `● 記録中 ${fmtDist(walk.dist)}・${fmtTime(el)}`;
+    else if (route && route.rough) line = `残り 約${fmtDist(lastRemain)}（目安）`;
+    else if (lastRemain < 20) line = route && route.loop ? '出発点に戻りました' : '到着しました';
+    else line = `残り ${fmtDist(lastRemain)}・${hm(new Date(now + lastRemain / pace * 1000))}着`;
+    const n = lastRemain !== null && lastRemain >= 20 && !(route && route.rough) ? nextTurn() : null;
+    $('hud').classList.add('mini');
+    $('hud').innerHTML = (n && n.dist <= 150 ? turnHtml() : '') + `<div class="mid">${line}<span class="more">▾</span></div>` + alerts;
+    return;
+  }
+  $('hud').classList.remove('mini');
   if (lastRemain === null) top = '<div class="big">記録中（ルートなし）</div>';
   else if (route && route.rough) top = `<div class="big">残り 約${fmtDist(lastRemain)}</div><div class="small" style="margin:0">位置が粗いため目安です</div>`;
   else if (lastRemain < 20) top = `<div class="big">${route && route.loop ? '出発点に戻りました' : '到着しました'}</div>`;
@@ -155,8 +169,12 @@ function renderHud() {
     (route && route.prof && lastRemain >= 20 ? `<div>残りの上り ${Math.round(route.remUp)}m</div>` : '') +
     `<div>${v === null ? '—' : (v * 3.6).toFixed(1)} km/h　${Math.round(walk.kcal)} kcal</div>` +
     `<div class="small" style="margin:0">歩行 ${fmtTime(el)}・${fmtDist(walk.dist)}</div>` +
-    (meshHud() ? `<div class="small" style="margin:0;color:#b9770e">${meshHud()}</div>` : '') +
-    (walk.vt ? '<div class="small" style="margin:0;color:#7a5c8e">🚃 乗り物で移動中（歩いた距離に入れていません）</div>' : '') +
+    (meshHud() ? `<div class="small" style="margin:0;color:#b9770e">${meshHud()}</div>` : '') + alerts +
+    '<div class="small" style="margin:0;text-align:right;color:#777">押すと小さく ▴</div>';
+}
+// 版25：小さくしているときも出す注意（乗り物・ルートを外れた・位置が粗い・知らせ）
+function hudAlerts(now) {
+  return (walk.vt ? '<div class="small" style="margin:0;color:#7a5c8e">🚃 乗り物で移動中（歩いた距離に入れていません）</div>' : '') +
     (walk.askRR ? '<div style="margin:2px 0;padding:3px 6px;border-radius:6px;background:#fdecea;color:#c0392b;font-weight:bold">⚠ ルートを外れました。ここをタップして組み直す</div>' : '') +
     (walk.badSince && now - walk.badSince >= 10000 ? `<div class="small" style="margin:0;color:#c00">位置が粗いので記録を止めています（精度 約${fmtAcc(walk.acc)}）</div>` : '') +
     (walk.note && now < walk.noteUntil ? `<div class="small" style="margin:0;color:#1f6fd1">${walk.note}</div>` : '') +
@@ -182,7 +200,7 @@ function saveSession() {
     if (!walk) { localStorage.removeItem('walk_session'); return; }
     const r = route && {coords: route.coords, pts: route.pts, baseTotal: route.baseTotal, loop: route.loop, ur: route.ur,
       prof: route.prof, turns: route.turns, prog: route.prog};
-    lsSet('walk_session', JSON.stringify({t0: walk.t0, dist: walk.dist, kcal: walk.kcal, up: walk.up,
+    lsSet('walk_session', JSON.stringify({t0: walk.t0, dist: walk.dist, kcal: walk.kcal, up: walk.up, s0: walk.s0,
       saved: Date.now(), dest, destName, mode, route: r}));
   } catch (e) {}
 }
@@ -205,6 +223,8 @@ function startWalk(prev) {
   hudTimer = setInterval(() => { renderHud(); if (++n % 6 === 0) { saveTracks(); saveSession(); updToday(); playLive(); } }, 5000);
   // 記録を始めたら画面ONを「入」にする（版20：アプリ版で画面ONの仕組みがないときは入れない。画面を消しても記録が続くため）
   wakeOn = !(/MichiMiruApp/.test(navigator.userAgent) && !('wakeLock' in navigator)); applyWake();
+  if (typeof sumClose === 'function') sumClose(); // 版25：前の散歩のまとめを閉じる
+  if (typeof sumStart === 'function') sumStart(); // 版25：まとめのための控え（スタンプ・東海道）
   saveSession();
   renderHud(); updToday();
   if (typeof bgStart === 'function') bgStart(); // 版20：アプリ版なら、画面を消しても記録を続ける
@@ -235,7 +255,7 @@ function restoreSession() {
   }
   let track = tracks.find(t => t.k === 'walk' && t.t0 === s.t0);
   if (!track) { track = {k: 'walk', t0: s.t0, t1: s.t0, kcal: 0, pts: [], ts: [], ses: s.t0}; tracks.push(track); }
-  startWalk({t0: s.t0, dist: s.dist, kcal: s.kcal, up: s.up || 0, track, note: '前回の歩行を続きから再開しました', noteUntil: Date.now() + 20000});
+  startWalk({t0: s.t0, dist: s.dist, kcal: s.kcal, up: s.up || 0, s0: s.s0, track, note: '前回の歩行を続きから再開しました', noteUntil: Date.now() + 20000});
   status('前回の歩行を続きから再開しました');
 }
 
@@ -294,6 +314,7 @@ $('endBtn').onclick = () => {
   walk.track.t1 = Date.now(); walk.track.kcal = Math.round(walk.kcal * 10) / 10;
   if (walk.track.pts.length < 2) tracks = tracks.filter(t => t !== walk.track);
   saveTracks();
+  const ended = walk; // 版25：散歩のまとめに使う
   clearInterval(hudTimer); clearTimeout(followTimer); walk = null;
   if (typeof bgStop === 'function') bgStop(); // 版20：裏の記録を止める（通知も消える）
   saveSession();
@@ -301,6 +322,7 @@ $('endBtn').onclick = () => {
   document.body.classList.remove('walking', 'menu');
   resizeSoon();
   afterTracksChanged();
+  if (typeof sumEnd === 'function') sumEnd(ended); // 版25：散歩のまとめ
 };
 
 // ---------- 歩いた記録（保存・表示） ----------
@@ -583,7 +605,7 @@ function processSeg(raw, src) {
 }
 // ---------- 全部まとめて書き出す・読み込む ----------
 // 書き出す設定（値は保存している文字のまま）。東海道は起点と進み具合を組で扱う
-const BK_SET = ['walk_weight', 'walk_vib', 'walk_autofollow', 'walk_offshow', 'walk_meshshow', 'walk_cmp', 'walk_reroute', 'walk_loopdir', 'walk_theme', 'walk_nightmap', 'walk_font', 'walk_trkm'];
+const BK_SET = ['walk_weight', 'walk_vib', 'walk_autofollow', 'walk_offshow', 'walk_meshshow', 'walk_cmp', 'walk_reroute', 'walk_loopdir', 'walk_theme', 'walk_nightmap', 'walk_font', 'walk_trkm', 'walk_hudfull'];
 const BK_TK = ['walk_tokaido_from', 'walk_tokaido_last'];
 const ymdNum = d => `${d.getFullYear()}${String(d.getMonth() + 1).padStart(2, '0')}${String(d.getDate()).padStart(2, '0')}`;
 const trackKey = t => `${t.t0}|${t.k || 'walk'}|${t.pts[0]}`;

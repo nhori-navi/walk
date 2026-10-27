@@ -1,4 +1,4 @@
-// hikae.js：版24 4つのアプリ（MichiMiru・MeguMiru・TenMiru・YamaMiru）の控えを1つのファイルで（native.js のあとに読み込む）
+// hikae.js：版24（版25：散歩のまとめも入れる）4つのアプリ（MichiMiru・MeguMiru・TenMiru・YamaMiru）の控えを1つのファイルで（native.js のあとに読み込む）
 // ・書き出し：4つの記録を miru-hikae-日付.json に。中身はそれぞれのアプリの書き出しと同じ形＋紹介を見た印など
 // ・自動の控え（アプリ版だけ）：前の控えから7日たっていたら、開いたときに Documents/MiruHikae に。自動の分は新しい4つだけ残す
 // ・読み込み：MichiMiru の分はその場で足し合わせる。MeguMiru の分は MeguMiru（版18〜）が次に開いたときに自分で足し合わせる
@@ -31,6 +31,7 @@ async function hkBuild() {
   const t = Date.now(), apps = {};
   const w = bkObj(); w.ls = {}; ['walk_help_v1'].forEach(k => { const v = getLS(k); if (v !== null) w.ls[k] = v; });
   apps.walk = w;
+  if (typeof sumLoad === 'function') { const ws = await sumLoad(); if (ws.length) w.walks = ws; } // 版25：散歩のまとめ
   const db = await meguDb(false);
   if (db) {
     const rec = await kvGet(db, 'rec');
@@ -124,6 +125,9 @@ async function hkApply(p, rep) {
   const fill = ls => Object.entries(ls || {}).forEach(([k, v]) => { try { if (localStorage.getItem(k) === null && typeof v === 'string') localStorage.setItem(k, v); } catch (e) {} });
   if (p.walk) {
     const n = applyBackup(p.walk); saveTracks(); afterTracksChanged(); fill(a.walk.ls);
+    if (Array.isArray(a.walk.walks) && typeof sumLoad === 'function') { // 版25：散歩のまとめ（始めた時刻で1つ）
+      try { const have = await sumLoad(), ks = new Set(have.map(x => x.t0)); a.walk.walks.forEach(x => { if (x && x.t0 && !ks.has(x.t0)) have.push(x); }); have.sort((x, y) => x.t0 - y.t0); await trkDo('readwrite', st => st.put(have, 'walks')); } catch (e) {}
+    }
     done.push(`MichiMiru 新しい記録 ${n}本`);
   }
   if (a.megu && a.megu.rec) {

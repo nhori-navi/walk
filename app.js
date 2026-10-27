@@ -720,7 +720,10 @@ $('omBtn').onclick = () => { if (typeof rmSet === 'function') rmSet('loop'); loo
 // 引き継ぐもの：未踏破・坂・遊歩道の好み（そのまま）、経由地・寄り道先（まだ通っていない所だけ）、
 // 延長と周回の距離（最初の予定の全長を目安に、歩いた分を差し引いて残りを足す）。たった今歩いてきた道は戻りにくくする
 let rrPlan = null, lastRR = 0;
-$('hud').addEventListener('click', () => { if (walk && walk.askRR) reroute('ask'); });
+$('hud').addEventListener('click', () => {
+  if (walk && walk.askRR) { reroute('ask'); return; }
+  if (walk) { lsSet('walk_hudfull', getLS('walk_hudfull') === '1' ? '0' : '1'); renderHud(); } // 版25：小さく／詳しく
+});
 const RR_MODES = {auto: '自動で組み直す', ask: '聞いてから', off: 'しない'};
 $('rrMode').value = RR_MODES[getLS('walk_reroute')] ? getLS('walk_reroute') : 'auto';
 $('rrMode').addEventListener('change', () => lsSet('walk_reroute', $('rrMode').value));
