@@ -441,7 +441,7 @@ function drawTracks() {
   const u = lsUsage(), pct = Math.round(u.all / LS_CAP * 100), mine = Math.round(u.mine / LS_CAP * 100);
   $('recStat').innerHTML = `保存済み：歩行 ${(lw / 1000).toFixed(1)}km${lo >= 50 ? `（道から外れた${(lo / 1000).toFixed(1)}kmは除く）` : ''}・乗り物 ${(lv / 1000).toFixed(1)}km` +
     (graph ? `<br>いま読み込んでいる範囲で歩いた道の長さ：${(lu / 1000).toFixed(1)}km（同じ道は1回と数える）` : '') +
-    (TRK.idb ? `<br>歩いた記録の置き場所：大きな置き場（IndexedDB）<span id="trkUse"></span>` : '') +
+    (TRK.idb ? `<br>歩いた記録の置き場所：この端末の、たっぷり入る置き場所<span id="trkUse"></span>` : '') +
     `<br>設定などの小さな置き場（同じアドレスのアプリで共有）：約${pct}%使用（うち MichiMiru ${mine}%）`;
   // 版21：大きな置き場の使っている量（ブラウザが答える目安。道のデータなども含む）
   if (TRK.idb && navigator.storage && navigator.storage.estimate) navigator.storage.estimate().then(e => {

@@ -1,5 +1,6 @@
 // MichiMiru：版20〜 Android アプリ版（Capacitor）で開いたときだけ動く部分
 // 版21：MeguMiru を重ねて開く・戻るボタン。版22：TenMiru・YamaMiru も重ねて開く、スマホの通知（ISS の予約・散歩中の上空の見張り）
+// 版23：重ねて開いている間の「戻る帯」（画面の上）、地図の右の ▦ にまとめた、MeguMiru に MichiMiru の位置を渡す
 // ・歩いている間は「裏の記録」（BackgroundGeolocation）で位置を受け取り、いつもの記録（walkStep）に入れる
 //   → 画面を消してポケットに入れても記録が続く。記録中は通知欄に「MichiMiru 記録中」
 // ・書き出しはスマホの「Documents（ドキュメント）」フォルダーに保存（アプリの中ではダウンロードが使えないため）
@@ -112,17 +113,26 @@ function nativeSaveFile(name, data, done) {
 // 同じアドレス（nhori-navi.github.io）なので、置き場も共通。戻るのは、それぞれの「🚶」かスマホの「戻る」
 // keep：閉じても残して裏で動かす（MeguMiru は集め続ける）。TenMiru・YamaMiru は閉じたら止める（カメラ・通信・電池）
 const OV = {
-  megu: {path: '../megu/', btn: 'Megu', title: 'MeguMiru', color: '#7a5c8e', bg: '#f6f3f8', keep: true},
-  sora: {path: '../sora/', btn: 'Ten', title: 'TenMiru', color: '#1f6fd1', bg: '#eef3fb', keep: false},
-  yama: {path: '../yama/', btn: 'Yama', title: 'YamaMiru', color: '#2e7d32', bg: '#f3f7f1', keep: false}
+  megu: {path: '../megu/', btn: 'Megu', icon: '🗾', sub: '行った場所を集める', title: 'MeguMiru', color: '#7a5c8e', bg: '#f6f3f8', keep: true},
+  sora: {path: '../sora/', btn: 'Ten', icon: '✈️', sub: '見上げた空の飛行機・星', title: 'TenMiru', color: '#1f6fd1', bg: '#eef3fb', keep: false},
+  yama: {path: '../yama/', btn: 'Yama', icon: '🏔', sub: '見えている山の名前', title: 'YamaMiru', color: '#2e7d32', bg: '#f3f7f1', keep: false}
 };
 const ovFrames = {};
 let ovCur = '';
 function ovStyle() {
   if ($('ovStyle')) return;
   const st = document.createElement('style'); st.id = 'ovStyle';
-  st.textContent = '.ovFrame{position:fixed;left:0;top:0;width:100%;height:100%;border:0;z-index:9000;display:none}.ovFrame.on{display:block}' +
-    Object.entries(OV).map(([k, o]) => `#mapBtns #ov_${k}{background:${o.color};color:#fff;font-size:12px;letter-spacing:-.5px}`).join('');
+  // 版23：重ねたアプリは「戻る帯」（#ovStrip、高さ32px）の下に置く。帯は MichiMiru の部品なので、どのアプリのどのタブでも見える
+  st.textContent = ':root{--ovs:calc(32px + env(safe-area-inset-top,0px))}' +
+    '.ovFrame{position:fixed;left:0;top:var(--ovs);width:100%;height:calc(100% - var(--ovs));border:0;z-index:9000;display:none}.ovFrame.on{display:block}' +
+    '#ovStrip{position:fixed;left:0;right:0;top:0;margin:0;border-radius:0;height:var(--ovs);padding:env(safe-area-inset-top,0px) 10px 0;box-sizing:border-box;z-index:9001;display:none;align-items:center;gap:8px;' +
+    'background:#1e7e34;color:#fff;font-size:14px;font-weight:bold;border:0;width:100%;text-align:left;box-shadow:0 1px 4px rgba(0,0,0,.3)}' +
+    'body.ov-on #ovStrip{display:flex}#ovStrip .bk{white-space:nowrap}#ovStrip .st{margin-left:auto;font-weight:normal;font-size:13px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}' +
+    '#appsBox{display:none;position:absolute;right:62px;z-index:5;width:250px;background:#fff;border-radius:14px;padding:6px;box-shadow:0 2px 12px rgba(0,0,0,.3)}#appsBox.on{display:block}' +
+    '#appsBox button{display:flex;align-items:center;gap:10px;width:100%;margin:0;padding:8px 10px;min-height:54px;border:0;border-left:6px solid var(--c);border-radius:10px;background:transparent;text-align:left;color:#1d2b22}' +
+    '#appsBox button+button{margin-top:4px}#appsBox .ic{font-size:26px}#appsBox b{display:block;font-size:16px}#appsBox small{display:block;font-size:12px;color:#5b6b61}' +
+    'body.dark #appsBox{background:#28322e;box-shadow:0 4px 18px rgba(0,0,0,.6)}body.dark #appsBox button{color:#f1f5f2}body.dark #appsBox small{color:#c9d3cd}' +
+    'body.mode-tk #appsBox,body.mode-tabi #appsBox{display:none}';
   document.head.appendChild(st);
 }
 function ovOpen(id) {
@@ -141,6 +151,7 @@ function ovOpen(id) {
   if (ovCur === id) return;
   ovCur = id; f.classList.add('on');
   document.body.classList.add('ov-on'); if (id === 'megu') document.body.classList.add('megu-on');
+  appsClose(); stripUpd();
   try { if (swap && history.state && history.state.mmOv) history.replaceState({mmOv: id}, ''); else history.pushState({mmOv: id}, ''); } catch (e) {}
   lsSet('walk_ov', id);
 }
@@ -161,6 +172,62 @@ function ovClose(fromBack, swap) {
 // 重ねたアプリの「🚶」から呼ぶ（MeguMiru 版16 は meguClose を呼ぶ）
 window.miruClose = () => ovClose(false);
 window.meguClose = window.miruClose;
+
+// ---------- 版23：戻る帯（重ねて開いている間だけ、画面のいちばん上） ----------
+// 重ねたアプリ（MeguMiru 版17・TenMiru v41・YamaMiru 版13）は miruStrip を見て、自分の 🚶 を出さない
+window.miruStrip = true;
+function fmtDist(m) { return m < 1000 ? Math.round(m) + 'm' : (m / 1000).toFixed(1) + 'km'; }
+function fmtDur(ms) { const m = Math.max(0, Math.round(ms / 60000)); return m < 60 ? m + '分' : Math.floor(m / 60) + '時間' + (m % 60 ? (m % 60) + '分' : ''); }
+function stripUpd() {
+  let s = $('ovStrip');
+  if (!s) {
+    s = document.createElement('button'); s.id = 'ovStrip'; s.type = 'button'; s.title = 'MichiMiru に戻る';
+    s.innerHTML = '<span class="bk">◀ MichiMiru に戻る</span><span class="st"></span>';
+    s.onclick = () => ovClose(false);
+    document.body.appendChild(s);
+  }
+  s.querySelector('.st').textContent = !walk ? '記録していません'
+    : walk.vt ? `🚃 乗り物で移動中・${fmtDur(Date.now() - walk.t0)}`
+    : `● 記録中 ${fmtDist(walk.dist || 0)}・${fmtDur(Date.now() - walk.t0)}`;
+}
+setInterval(() => { if (ovCur) stripUpd(); }, 5000);
+
+// ---------- 版23：重ねたアプリに MichiMiru の位置を渡す（MeguMiru 版17 が使う。GPS を二重に使わない） ----------
+// 画面をつけている間はブラウザの位置を渡す。裏の記録の位置（画面を消している間）は、ブラウザの位置が15秒来ていないときだけ渡す（同じ位置を二重に渡さない）
+const POSL = []; let posFwdAt = 0;
+window.miruPosOn = cb => { if (typeof cb === 'function' && !POSL.includes(cb)) POSL.push(cb); };
+function ovPos(p) {
+  if (!POSL.length || !p || !p.coords) return;
+  const now = Date.now();
+  if (p.bg && now - posFwdAt < 15000) return;
+  if (!p.bg) posFwdAt = now;
+  const c = p.coords;
+  const q = {coords: {longitude: c.longitude, latitude: c.latitude, accuracy: c.accuracy, altitude: c.altitude == null ? null : c.altitude,
+    heading: c.heading == null ? null : c.heading, speed: c.speed == null ? null : c.speed}, timestamp: p.timestamp || now};
+  for (let i = POSL.length - 1; i >= 0; i--) { try { POSL[i](q); } catch (e) { POSL.splice(i, 1); } } // 消えた画面の分は外す
+}
+
+// ---------- 版23：地図の右の ▦（重ねて開くアプリをまとめた） ----------
+function appsClose() { const bx = $('appsBox'); if (bx) bx.classList.remove('on'); const b = $('mApps'); if (b) b.classList.remove('on'); }
+function appsSetup() {
+  const b = document.createElement('button'); b.id = 'mApps'; b.title = 'ほかのアプリを重ねて開く'; b.textContent = '▦';
+  $('mapBtns').appendChild(b);
+  const bx = document.createElement('div'); bx.id = 'appsBox';
+  bx.innerHTML = Object.entries(OV).map(([k, o]) => `<button id="ov_${k}" type="button" style="--c:${o.color}"><span class="ic">${o.icon}</span><span><b>${o.title}</b><small>${o.sub}</small></span></button>`).join('');
+  $('mapBtns').parentNode.appendChild(bx);
+  Object.keys(OV).forEach(k => { $('ov_' + k).onclick = e => { e.stopPropagation(); ovOpen(k); }; });
+  b.onclick = e => {
+    e.stopPropagation();
+    const open = !bx.classList.contains('on');
+    if (open) {
+      const lb = $('layerBox'); if (lb) { lb.classList.remove('on'); const ml = $('mLayer'); if (ml) ml.classList.remove('on'); }
+    }
+    bx.classList.toggle('on', open); b.classList.toggle('on', open);
+    // 枠の下の端を ▦ の下の端にそろえて、上に向かって開く（下のパネルに重ならないように）
+    if (open) bx.style.top = Math.max(8, $('mapBtns').offsetTop + b.offsetTop + b.offsetHeight - bx.offsetHeight) + 'px';
+  };
+  document.addEventListener('pointerdown', e => { if (bx.classList.contains('on') && !bx.contains(e.target) && e.target !== b) appsClose(); }, true);
+}
 window.addEventListener('popstate', () => { if (ovCur && !(history.state && history.state.mmOv === ovCur)) ovClose(true); });
 // スマホの「戻る」（アプリの部品 App があるときだけ。ないときはアプリが裏に回るだけ）
 function backSetup() {
@@ -316,7 +383,7 @@ function appCard() {
       (iss && iss.n ? `${iss.n}件を予約（次は ${mdw(iss.next)} ${hhmm(iss.next)} から見える通過）${iss.exact ? '' : '・目安の時刻（10分前ごろ）'}` : iss ? '3日以内に見える通過はありません' : 'まだ予約していません（Ten を開くと予約します）') +
       (iss ? `<br><span class="small">予約した日時：${mdw(iss.t)} ${hhmm(iss.t)}。Ten を開くたびに新しくなります</span>` : '') +
       (NT.exact === false ? '<div class="acts" style="margin-top:4px"><button id="appExact">⏰ 正確な時刻で知らせる（許可の画面を開く）</button></div>' : '') + '</div>' +
-      '<div style="margin-top:10px"><b>🛩 散歩中の上空の見張り</b>（記録している間、TenMiru の「軍用機・真上通過を知らせる」と範囲の設定に従って通知）<div class="row">' +
+      '<div style="margin-top:10px"><b>🛩 散歩中の上空の見張り</b>（記録中は上空を見張り、軍用機や真上を通る飛行機を通知します。何を知らせるか・範囲は TenMiru の設定で）<div class="row">' +
       `<select id="appSky"><option value="60">1分ごと</option><option value="120">2分ごと</option><option value="300">5分ごと</option><option value="0">見張らない</option></select></div>` +
       `<span class="small">${!ev ? '見張っていません' : BG.on ? (SKY.err ? `<span style="color:#c0392b">${esc(SKY.err)}</span>` : SKY.last ? `最後に確かめた時刻 ${hhmm(SKY.last)}・今日の通知 ${SKY.n}件` : '歩き始めると見張ります') : '歩き始めると見張ります（画面を消していても）'}</span></div>`;
   }
@@ -334,15 +401,8 @@ if (IN_APP) {
   if (walk) bgStart();   // 開き直して歩行を続きから再開したとき
   backSetup(); ntTapSetup();
   if (NT.ok) ntExact().then(appCard);
-  // 地図の右の丸いボタンに「Megu」「Ten」「Yama」を足す。前回見ていたアプリがあれば、それを開いて始める
-  if ($('mapBtns')) {
-    ovStyle();
-    Object.entries(OV).forEach(([k, o]) => {
-      const b = document.createElement('button'); b.id = 'ov_' + k; b.title = o.title + ' を開く'; b.textContent = o.btn;
-      b.onclick = e => { e.stopPropagation(); ovOpen(k); };
-      $('mapBtns').appendChild(b);
-    });
-  }
+  // 地図の右の丸いボタンに ▦（版23。押すと MeguMiru・TenMiru・YamaMiru）を足す。前回見ていたアプリがあれば、それを開いて始める
+  if ($('mapBtns')) { ovStyle(); appsSetup(); }
   if (getLS('walk_megu_open') === '1') { lsSet('walk_ov', 'megu'); try { localStorage.removeItem('walk_megu_open'); } catch (e) {} } // 版21 からの引き継ぎ
   const last = getLS('walk_ov');
   if (OV[last]) ovOpen(last);

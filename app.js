@@ -284,6 +284,7 @@ function onPos(p) {
   if (!(startPt && !walk)) cam();
   updateRemain();
   if (typeof tripOnPos === 'function') tripOnPos(); // 版14：降りる駅に着いたら、目的地までのルートに切り替える
+  if (typeof ovPos === 'function') ovPos(p);        // 版23：アプリ版で重ねたアプリ（MeguMiru）に位置を渡す
 }
 document.addEventListener('visibilitychange', () => {
   if (document.visibilityState === 'visible' && 'geolocation' in navigator)

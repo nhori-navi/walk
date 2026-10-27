@@ -270,7 +270,7 @@ body.dark .me .dot{left:5px;top:5px;width:24px;height:24px;border-width:3px;box-
   const TABS = [['route', '🧭', 'ルート'], ['play', '🟧', 'あそぶ'], ['walk'], ['rec', '🗾', '記録'], ['set', '⚙️', '設定']];
   const bar = document.createElement('nav'); bar.id = 'tabbar';
   bar.innerHTML = TABS.map(([k, ic, nm]) => k === 'walk'
-    ? '<button id="walkFab" class="fab"><span class="ic">🚶</span><span id="walkFabTx">記録だけ</span></button>'
+    ? '<button id="walkFab" class="fab"><span class="ic">🚶</span><span id="walkFabTx">記録開始</span></button>'
     : `<button class="tb" data-tab="${k}"><span class="ic">${ic}</span><span>${nm}</span></button>`).join('');
   document.body.appendChild(bar);
   let cur = getLS('walk_tab') || 'route';
@@ -543,7 +543,7 @@ body.dark .me .dot{left:5px;top:5px;width:24px;height:24px;border-width:3px;box-
     const wr = waitingRoute();
     updRc(); // 版17
     if (trip && $('rmode').value !== 'train') rmSet('train');
-    $('walkFabTx').textContent = route ? '歩き始める' : wr ? (calcState.k === 'calc' ? '計算中…' : '計算待ち') : '記録だけ';
+    $('walkFabTx').textContent = route ? '歩き始める' : wr ? (calcState.k === 'calc' ? '計算中…' : '計算待ち') : '記録開始';
     $('recalcBtn').textContent = walk && route ? '🔄 組み直す' : '再計算';
     showWhy(wr);
     $('mFollow').classList.toggle('on', !!follow);
