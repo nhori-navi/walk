@@ -105,6 +105,12 @@ async function android() {
       `    <string name="capacitor_background_geolocation_notification_color">${GREEN}</string>\n</resources>`);
     fs.writeFileSync(sx, s);
   }
+  // 版22：カメラ（TenMiru・YamaMiru の「空に向ける」「カメラ」）と振動の許可を足す
+  const mf = path.join(HERE, 'android', 'app', 'src', 'main', 'AndroidManifest.xml');
+  let m = fs.readFileSync(mf, 'utf8');
+  const add = ['<uses-permission android:name="android.permission.CAMERA" />', '<uses-permission android:name="android.permission.VIBRATE" />',
+    '<uses-feature android:name="android.hardware.camera" android:required="false" />'].filter(x => !m.includes(x));
+  if (add.length) { m = m.replace('</manifest>', '    ' + add.join('\n    ') + '\n</manifest>'); fs.writeFileSync(mf, m); }
   // アプリの番号：作るたびに1つ上げる（同じ番号だと上書きで入れられない）
   const run = Number(process.env.RUN_NO || 1);
   const bg = path.join(HERE, 'android', 'app', 'build.gradle');
