@@ -1,4 +1,5 @@
-// MichiMiru：版20〜 Android アプリ版（Capacitor）で開いたときだけ動く部分（版21：MeguMiru を重ねて開く・戻るボタン）
+// MichiMiru：版20〜 Android アプリ版（Capacitor）で開いたときだけ動く部分
+// 版21：MeguMiru を重ねて開く・戻るボタン。版22：TenMiru・YamaMiru も重ねて開く、スマホの通知（ISS の予約・散歩中の上空の見張り）
 // ・歩いている間は「裏の記録」（BackgroundGeolocation）で位置を受け取り、いつもの記録（walkStep）に入れる
 //   → 画面を消してポケットに入れても記録が続く。記録中は通知欄に「MichiMiru 記録中」
 // ・書き出しはスマホの「Documents（ドキュメント）」フォルダーに保存（アプリの中ではダウンロードが使えないため）
@@ -62,6 +63,7 @@ function bgOnLoc(loc, err) {
   // 画面を消している間はタイマーが遅れるので、ここで保存しておく（30秒ごとか50点ごと）
   if (Date.now() - BG.saved > 30000 || BG.n % 50 === 0) { BG.saved = Date.now(); saveTracks(); saveSession(); }
   if (BG.n % 20 === 0 && document.visibilityState === 'visible') appCard();
+  skyCheck(); // 版22：散歩中の上空の見張り（間隔は skyEvery）
 }
 
 // ---------- 設定タブの「📱」のカード：アプリ版のときは状態と設定へのボタン ----------
@@ -85,73 +87,266 @@ function appCard() {
 
 // ---------- 書き出し：アプリ版は Documents フォルダーへ ----------
 // 成功したら true（walk.js の書き出しから呼ぶ）。ブラウザでは false を返していつものダウンロード
-// 版21：done(ok, 文) を渡すと、結果をそちらに知らせる（MeguMiru の書き出しが使う）
-function nativeSaveFile(name, text, done) {
+// 版21：done(ok, 文) を渡すと、結果をそちらに知らせる（重ねて開いたアプリの書き出しが使う）
+// 版22：data が文字でなく画像などのまとまり（Blob）なら、そのまま（バイナリで）保存する（TenMiru のシェアカードの画像など）
+function nativeSaveFile(name, data, done) {
   if (!NATIVE || !capHas('Filesystem')) return false;
-  CAP.nativePromise('Filesystem', 'writeFile', {path: name, data: text, directory: 'DOCUMENTS', encoding: 'utf8', recursive: true})
-    .then(() => { const m = `書き出しました（スマホの「Documents」フォルダーの ${name}）`; if (done) done(true, m); else status('全部まとめて' + m); })
-    .catch(e => { const m = '書き出しに失敗しました（' + jaErr(e) + '）'; if (done) done(false, m); else showErr(m); });
+  const ok = () => { const m = `書き出しました（スマホの「Documents」フォルダーの ${name}）`; if (done) done(true, m); else status('全部まとめて' + m); };
+  const ng = e => { const m = '書き出しに失敗しました（' + jaErr(e) + '）'; if (done) done(false, m); else showErr(m); };
+  if (typeof data === 'string') {
+    CAP.nativePromise('Filesystem', 'writeFile', {path: name, data, directory: 'DOCUMENTS', encoding: 'utf8', recursive: true}).then(ok, ng);
+    return true;
+  }
+  const rd = new FileReader();
+  rd.onload = () => {
+    const b64 = String(rd.result).replace(/^data:[^,]*,/, '');
+    CAP.nativePromise('Filesystem', 'writeFile', {path: name, data: b64, directory: 'DOCUMENTS', recursive: true}).then(ok, ng);
+  };
+  rd.onerror = () => ng(rd.error || new Error('読み取れませんでした'));
+  try { rd.readAsDataURL(data); } catch (e) { ng(e); }
   return true;
 }
 
-// ---------- 版21：MeguMiru を MichiMiru の上に重ねて開く（アプリ版だけ） ----------
-// 画面を切り替えると MichiMiru が止まって裏の記録が途切れるので、MichiMiru はそのままで上に重ねる。
-// 同じアドレスなので、MeguMiru は MichiMiru の記録をそのまま読める。戻るのは MeguMiru の「🚶」かスマホの「戻る」
-const MEGU_URL = new URL('../megu/', location.href).href;
-let meguFrame = null;
-const meguIsOpen = () => document.body.classList.contains('megu-on');
-function meguStyle() {
-  if ($('meguStyle')) return;
-  const st = document.createElement('style'); st.id = 'meguStyle';
-  st.textContent = '#meguFrame{position:fixed;left:0;top:0;width:100%;height:100%;border:0;z-index:9000;display:none;background:#f6f3f8}' +
-    'body.megu-on #meguFrame{display:block}#mapBtns #mMegu{background:#7a5c8e;color:#fff;font-size:12px;letter-spacing:-.5px}';
+// ---------- 版21・22：ほかのアプリを MichiMiru の上に重ねて開く（アプリ版だけ） ----------
+// 画面を切り替えると MichiMiru が止まって裏の記録が途切れるので、MichiMiru はそのままで上に重ねる（iframe）。
+// 同じアドレス（nhori-navi.github.io）なので、置き場も共通。戻るのは、それぞれの「🚶」かスマホの「戻る」
+// keep：閉じても残して裏で動かす（MeguMiru は集め続ける）。TenMiru・YamaMiru は閉じたら止める（カメラ・通信・電池）
+const OV = {
+  megu: {path: '../megu/', btn: 'Megu', title: 'MeguMiru', color: '#7a5c8e', bg: '#f6f3f8', keep: true},
+  sora: {path: '../sora/', btn: 'Ten', title: 'TenMiru', color: '#1f6fd1', bg: '#eef3fb', keep: false},
+  yama: {path: '../yama/', btn: 'Yama', title: 'YamaMiru', color: '#2e7d32', bg: '#f3f7f1', keep: false}
+};
+const ovFrames = {};
+let ovCur = '';
+function ovStyle() {
+  if ($('ovStyle')) return;
+  const st = document.createElement('style'); st.id = 'ovStyle';
+  st.textContent = '.ovFrame{position:fixed;left:0;top:0;width:100%;height:100%;border:0;z-index:9000;display:none}.ovFrame.on{display:block}' +
+    Object.entries(OV).map(([k, o]) => `#mapBtns #ov_${k}{background:${o.color};color:#fff;font-size:12px;letter-spacing:-.5px}`).join('');
   document.head.appendChild(st);
 }
-function meguOpen() {
-  meguStyle();
-  if (!meguFrame) {
-    meguFrame = document.createElement('iframe');
-    meguFrame.id = 'meguFrame'; meguFrame.title = 'MeguMiru';
-    meguFrame.allow = 'geolocation; screen-wake-lock';
-    meguFrame.src = MEGU_URL + '?inapp=1';
-    document.body.appendChild(meguFrame);
+function ovOpen(id) {
+  const o = OV[id]; if (!o) return;
+  ovStyle();
+  const swap = !!(ovCur && ovCur !== id);
+  if (swap) ovClose(false, true);
+  let f = ovFrames[id];
+  if (!f) {
+    f = document.createElement('iframe');
+    f.className = 'ovFrame'; f.title = o.title; f.style.background = o.bg;
+    f.allow = 'geolocation; camera; screen-wake-lock; accelerometer; gyroscope; magnetometer; fullscreen';
+    f.src = new URL(o.path, location.href).href + '?inapp=1';
+    document.body.appendChild(f); ovFrames[id] = f;
   }
-  if (meguIsOpen()) return;
-  document.body.classList.add('megu-on');
-  try { history.pushState({mmMegu: 1}, ''); } catch (e) {}
-  lsSet('walk_megu_open', '1');
+  if (ovCur === id) return;
+  ovCur = id; f.classList.add('on');
+  document.body.classList.add('ov-on'); if (id === 'megu') document.body.classList.add('megu-on');
+  try { if (swap && history.state && history.state.mmOv) history.replaceState({mmOv: id}, ''); else history.pushState({mmOv: id}, ''); } catch (e) {}
+  lsSet('walk_ov', id);
 }
-function meguClose(fromBack) {
-  if (!meguIsOpen()) return;
-  document.body.classList.remove('megu-on');
-  lsSet('walk_megu_open', '0');
-  if (!fromBack && history.state && history.state.mmMegu) { try { history.back(); } catch (e) {} }
+// fromBack：スマホの「戻る」で閉じた（履歴はもう戻っている）。swap：別のアプリに切り替える途中
+function ovClose(fromBack, swap) {
+  const id = ovCur; if (!id) return;
+  const f = ovFrames[id];
+  ovCur = '';
+  if (f) {
+    f.classList.remove('on');
+    if (!OV[id].keep) { try { f.src = 'about:blank'; } catch (e) {} f.remove(); delete ovFrames[id]; } // 止める
+  }
+  document.body.classList.remove('ov-on', 'megu-on');
+  if (!swap) lsSet('walk_ov', '');
+  if (!fromBack && !swap && history.state && history.state.mmOv) { try { history.back(); } catch (e) {} }
   try { map.resize(); } catch (e) {}
 }
-window.addEventListener('popstate', () => { if (meguIsOpen() && !(history.state && history.state.mmMegu)) meguClose(true); });
+// 重ねたアプリの「🚶」から呼ぶ（MeguMiru 版16 は meguClose を呼ぶ）
+window.miruClose = () => ovClose(false);
+window.meguClose = window.miruClose;
+window.addEventListener('popstate', () => { if (ovCur && !(history.state && history.state.mmOv === ovCur)) ovClose(true); });
 // スマホの「戻る」（アプリの部品 App があるときだけ。ないときはアプリが裏に回るだけ）
 function backSetup() {
   if (!capHas('App')) return;
   try {
     CAP.addListener('App', 'backButton', d => {
-      if (d && d.canGoBack) history.back();        // ヘルプ・MeguMiru などを閉じる
+      if (d && d.canGoBack) history.back();        // ヘルプ・重ねたアプリの中の画面・重ねたアプリを順に閉じる
       else CAP.nativePromise('App', 'minimizeApp', {}).catch(() => {}); // いちばん上の画面なら、アプリを裏に回す（記録は続く）
     });
   } catch (e) {}
 }
 
+// ---------- 版22：スマホの通知（LocalNotifications） ----------
+// ・ISS：TenMiru が計算した「見える通過」を、時刻を決めて予約する（アプリを閉じていても、画面を消していても出る）
+// ・散歩中（MichiMiru で記録中）は、TenMiru の通知の設定（軍用機・真上通過・範囲）に従って上空を見張り、通知で知らせる
+// 通知を押すと、アプリが開いて TenMiru を重ねて開く
+const NT = {ok: NATIVE && capHas('LocalNotifications'), seq: 0, exact: null};
+const NT_ISS = 7000, NT_ISS_N = 10, NT_NOW = 7100;
+const DIR8 = ['北', '北東', '東', '南東', '南', '南西', '西', '北西'];
+const dir8 = d => DIR8[Math.round((((d % 360) + 360) % 360) / 45) % 8];
+const hhmm = t => { const d = new Date(t); return String(d.getHours()).padStart(2, '0') + ':' + String(d.getMinutes()).padStart(2, '0'); };
+const mdw = t => { const d = new Date(t); return `${d.getMonth() + 1}/${d.getDate()}（${'日月火水木金土'[d.getDay()]}）`; };
+function lsj(k, d) { try { const v = localStorage.getItem(k); return v == null ? d : JSON.parse(v); } catch (e) { return d; } }
+// いますぐ出す通知（exact の許可は要らないので isExactNotification:false）
+function ntNow(title, body, extra) {
+  if (!NT.ok) return false;
+  const id = NT_NOW + (NT.seq++ % 800);
+  CAP.nativePromise('LocalNotifications', 'schedule', {notifications: [{id, title, body, smallIcon: 'ic_tracking', iconColor: '#2fbf71',
+    isExactNotification: false, extra: extra || {}}]}).catch(() => {});
+  return true;
+}
+async function ntExact() {
+  try { const s = await CAP.nativePromise('LocalNotifications', 'checkExactNotificationSetting', {}); NT.exact = !!(s && s.exact_alarm === 'granted'); }
+  catch (e) { NT.exact = false; }
+  return NT.exact;
+}
+// TenMiru から呼ぶ：passes＝[{s:始まり, e:終わり, max:最大の高さ, from:'南西', to:'北東'}]。前の予約を消して入れ直す
+let issSig = '';
+async function miruIssSchedule(passes) {
+  if (!NT.ok || !Array.isArray(passes)) return false;
+  const exact = await ntExact(), lead = exact ? 5 : 10;   // 正確な時刻の許可がないときは、ずれてもよいよう10分前
+  const now = Date.now();
+  const list = passes.filter(p => p && p.s - lead * 60000 > now + 30000).slice(0, NT_ISS_N);
+  const sig = exact + '|' + list.map(p => Math.round(p.s / 60000)).join(',');
+  if (sig === issSig) return true;
+  issSig = sig;
+  await bgNotifPerm();
+  try { await CAP.nativePromise('LocalNotifications', 'cancel', {notifications: Array.from({length: NT_ISS_N}, (_, i) => ({id: NT_ISS + i}))}); } catch (e) {}
+  if (list.length) {
+    try {
+      await CAP.nativePromise('LocalNotifications', 'schedule', {notifications: list.map((p, i) => ({
+        id: NT_ISS + i, title: `🛰 ${lead}分後に宇宙ステーションが見えます`,
+        body: `${hhmm(p.s)}から ${p.from}の空 → ${p.to}へ（最大の高さ ${Math.round(p.max)}°）`,
+        schedule: {at: new Date(p.s - lead * 60000).toISOString(), allowWhileIdle: true},
+        isExactNotification: exact, smallIcon: 'ic_tracking', iconColor: '#2fbf71', extra: {ov: 'sora'}}))});
+    } catch (e) { issSig = ''; return false; }
+  }
+  lsSet('walk_iss_sched', JSON.stringify({t: now, n: list.length, next: list[0] ? list[0].s : 0, exact}));
+  appCard();
+  return true;
+}
+window.miruIssSchedule = miruIssSchedule;
+
+// 散歩中の上空の見張り（TenMiru の中継・機種の名前・通知の設定を使う）
+const SKY = {cfg: null, busy: false, last: 0, sent: new Set(), day: '', n: 0, err: ''};
+const skyEvery = () => { const v = getLS('walk_skywatch'); return v === null ? 120 : Number(v) || 0; }; // 秒。0＝見張らない
+async function skyCfg() {
+  if (SKY.cfg) return SKY.cfg;
+  const base = new URL('../sora/', location.href).href;
+  const cfg = {relays: [], TYPE: {}};
+  try {
+    const t = await (await fetch(base + 'config.js', {cache: 'no-cache'})).text();
+    ['RELAY', 'RELAY2'].forEach(k => { const m = t.match(new RegExp('\\b' + k + "\\s*=\\s*'([^']*)'")); if (m && /^https:\/\//.test(m[1].trim()) && !m[1].includes('〇')) cfg.relays.push(m[1].trim().replace(/\/+$/, '')); });
+    cfg.relays.sort((a, b) => a.includes('script.google.com') - b.includes('script.google.com')); // Cloudflare を先に
+  } catch (e) {}
+  try { const t = await (await fetch(base + 'data.js')).text(); cfg.TYPE = new Function(t + '\n;return typeof TYPE === "object" ? TYPE : {};')() || {}; } catch (e) {}
+  if (cfg.relays.length) SKY.cfg = cfg;
+  return cfg;
+}
+async function skyCheck() {
+  const every = skyEvery();
+  if (!NT.ok || !walk || !BG.on || !pos || !every || SKY.busy) return;
+  if (Date.now() - SKY.last < every * 1000) return;
+  if (ovCur === 'sora' && document.visibilityState === 'visible') return; // TenMiru を開いて見ているときは TenMiru が知らせる
+  const wantMil = lsj('sora_ntfMil', true) !== false, wantOver = lsj('sora_ntfOver', true) !== false;
+  if (!wantMil && !wantOver) return;
+  SKY.busy = true; SKY.last = Date.now();
+  try {
+    const c = await skyCfg();
+    if (!c.relays.length) { SKY.err = 'TenMiru の中継のアドレスが読めませんでした'; return; }
+    const km = Number(lsj('sora_rad', 30)) || 30, nm = Math.ceil(km / 1.852) + 1, la = pos[1].toFixed(2), lo = pos[0].toFixed(2);
+    let j = null;
+    for (const r of c.relays) {
+      const gas = r.includes('script.google.com');
+      try {
+        const ctl = new AbortController(), tm = setTimeout(() => ctl.abort(), 10000);
+        const res = await fetch(gas ? `${r}?lat=${la}&lon=${lo}&nm=${nm}` : `${r}/ac/${la}/${lo}/${nm}`, {signal: ctl.signal}).finally(() => clearTimeout(tm));
+        if (!res.ok) continue;
+        const o = await res.json(); if (o && !o.error) { j = o; break; }
+      } catch (e) {}
+    }
+    if (!j) { SKY.err = '上空のデータを取れませんでした'; return; }
+    SKY.err = '';
+    const now = Date.now(), day = ymd(now);
+    if (SKY.day !== day) { SKY.day = day; SKY.sent.clear(); }
+    const win = every / 60 + 0.5; // 次に確かめるまでの間（分）に真上付近を通るもの
+    (j.ac || j.aircraft || []).forEach(a => {
+      if (a.lat == null || a.lon == null || a.alt_baro === 'ground') return;
+      const dt = Math.min(60, Math.max(0, a.seen_pos || 0)), tr = (a.track ?? a.true_heading ?? 0) * Math.PI / 180, gs = a.gs || 0;
+      const dkm = gs * 1.852 / 3600 * dt, lat = a.lat + dkm * Math.cos(tr) / 110.57, lon = a.lon + dkm * Math.sin(tr) / (111.32 * Math.cos(a.lat * Math.PI / 180));
+      const kx = 111.32 * Math.cos(pos[1] * Math.PI / 180), e = (lon - pos[0]) * kx, n = (lat - pos[1]) * 110.57, dist = Math.hypot(e, n);
+      if (dist > km) return;
+      const dir = Math.atan2(e, n) * 180 / Math.PI, v = gs * 1.852 / 60;
+      let cpaT = null, cpaKm = null;
+      if (v > 1) { const ve = v * Math.sin(tr), vn = v * Math.cos(tr), t = -(e * ve + n * vn) / (v * v), tt = Math.max(0, t); cpaT = t; cpaKm = Math.hypot(e + ve * tt, n + vn * tt); }
+      const type = c.TYPE[a.t] || a.t || '機種不明', cs = (a.flight || '').trim();
+      if (wantMil && (a.dbFlags & 1) && !SKY.sent.has('m' + a.hex)) {
+        SKY.sent.add('m' + a.hex); SKY.n++;
+        ntNow('🛩 軍用機が近くにいます', `${type}（${dir8(dir)} ${dist.toFixed(0)}km）`, {ov: 'sora'});
+      }
+      const over = (cpaT != null && cpaT > 0 && cpaT <= win && cpaKm <= 3) || dist <= 2;
+      if (wantOver && over && !SKY.sent.has('o' + a.hex)) {
+        SKY.sent.add('o' + a.hex); SKY.n++;
+        ntNow('✈ まもなく真上付近を通ります', `${cs ? cs + '・' : ''}${type}（いま${dir8(dir)} ${dist.toFixed(1)}km）`, {ov: 'sora'});
+      }
+    });
+  } finally { SKY.busy = false; if (document.visibilityState === 'visible') appCard(); }
+}
+// 通知を押してアプリが開いたら、その通知のアプリ（TenMiru）を重ねて開く
+function ntTapSetup() {
+  if (!NT.ok) return;
+  try { CAP.addListener('LocalNotifications', 'localNotificationActionPerformed', a => { const ov = a && a.notification && a.notification.extra && a.notification.extra.ov; if (OV[ov]) ovOpen(ov); }); } catch (e) {}
+}
+
+// ---------- 設定タブの「📱」のカード：アプリ版のときは状態と設定へのボタン ----------
+function appCard() {
+  if (!IN_APP) return;
+  const st = $('appState'), btn = $('appAdd'), how = $('appHow');
+  $('appHead').firstChild.textContent = '📱 アプリ版（Android）';
+  btn.style.display = 'none';
+  let h;
+  if (!BG_OK) h = '<b style="color:#c0392b">⚠ アプリ版ですが、裏の記録の部品が見つかりません。</b>画面をつけている間だけ記録します。アプリを入れ直してみてください';
+  else if (BG.on) h = `📱 アプリ版で起動中・<b style="color:#1e7e34">画面を消しても記録中</b>（受け取った位置 ${BG.n} 回）`;
+  else if (BG.err) h = `📱 アプリ版で起動中<br><span style="color:#c0392b">${esc(BG.err)}</span>`;
+  else h = '📱 アプリ版で起動中・歩き始めると、画面を消しても記録が続きます';
+  st.innerHTML = h;
+  how.style.display = 'block';
+  let x = '記録が途中で止まるときは、下のボタンでアプリの設定を開き、<b>「位置情報」を「アプリの使用中のみ許可」以上（正確な位置：オン）</b>、<b>「電池」（バッテリー）を「制限なし」</b>にしてください。' +
+    (BG_OK ? '<div class="acts" style="margin-top:6px"><button id="appSet">⚙️ アプリの設定を開く</button></div>' : '');
+  if (NT.ok) {
+    const iss = lsj('walk_iss_sched', null), ev = skyEvery();
+    x += '<div style="margin-top:10px"><b>🛰 宇宙ステーションの知らせ</b>：' +
+      (iss && iss.n ? `${iss.n}件を予約（次は ${mdw(iss.next)} ${hhmm(iss.next)} から見える通過）${iss.exact ? '' : '・目安の時刻（10分前ごろ）'}` : iss ? '3日以内に見える通過はありません' : 'まだ予約していません（Ten を開くと予約します）') +
+      (iss ? `<br><span class="small">予約した日時：${mdw(iss.t)} ${hhmm(iss.t)}。Ten を開くたびに新しくなります</span>` : '') +
+      (NT.exact === false ? '<div class="acts" style="margin-top:4px"><button id="appExact">⏰ 正確な時刻で知らせる（許可の画面を開く）</button></div>' : '') + '</div>' +
+      '<div style="margin-top:10px"><b>🛩 散歩中の上空の見張り</b>（記録している間、TenMiru の「軍用機・真上通過を知らせる」と範囲の設定に従って通知）<div class="row">' +
+      `<select id="appSky"><option value="60">1分ごと</option><option value="120">2分ごと</option><option value="300">5分ごと</option><option value="0">見張らない</option></select></div>` +
+      `<span class="small">${!ev ? '見張っていません' : BG.on ? (SKY.err ? `<span style="color:#c0392b">${esc(SKY.err)}</span>` : SKY.last ? `最後に確かめた時刻 ${hhmm(SKY.last)}・今日の通知 ${SKY.n}件` : '歩き始めると見張ります') : '歩き始めると見張ります（画面を消していても）'}</span></div>`;
+  }
+  how.innerHTML = x;
+  const b = $('appSet');
+  if (b) b.onclick = () => { try { CAP.nativePromise('BackgroundGeolocation', 'openSettings', {}).catch(() => {}); } catch (e) {} };
+  const be = $('appExact');
+  if (be) be.onclick = () => { CAP.nativePromise('LocalNotifications', 'changeExactNotificationSetting', {}).then(() => { issSig = ''; ntExact().then(appCard); }).catch(() => {}); };
+  const sk = $('appSky');
+  if (sk) { sk.value = String(skyEvery()); sk.onchange = () => { lsSet('walk_skywatch', sk.value); SKY.last = 0; appCard(); }; }
+}
+
 if (IN_APP) {
   appCard();
   if (walk) bgStart();   // 開き直して歩行を続きから再開したとき
-  backSetup();
-  // 地図の右の丸いボタンに「Megu」を足す。前回 MeguMiru を見ていたら、それを開いて始める
+  backSetup(); ntTapSetup();
+  if (NT.ok) ntExact().then(appCard);
+  // 地図の右の丸いボタンに「Megu」「Ten」「Yama」を足す。前回見ていたアプリがあれば、それを開いて始める
   if ($('mapBtns')) {
-    meguStyle();
-    const b = document.createElement('button'); b.id = 'mMegu'; b.title = 'MeguMiru を開く'; b.textContent = 'Megu';
-    b.onclick = e => { e.stopPropagation(); meguOpen(); };
-    $('mapBtns').appendChild(b);
+    ovStyle();
+    Object.entries(OV).forEach(([k, o]) => {
+      const b = document.createElement('button'); b.id = 'ov_' + k; b.title = o.title + ' を開く'; b.textContent = o.btn;
+      b.onclick = e => { e.stopPropagation(); ovOpen(k); };
+      $('mapBtns').appendChild(b);
+    });
   }
-  if (getLS('walk_megu_open') === '1') meguOpen();
+  if (getLS('walk_megu_open') === '1') { lsSet('walk_ov', 'megu'); try { localStorage.removeItem('walk_megu_open'); } catch (e) {} } // 版21 からの引き継ぎ
+  const last = getLS('walk_ov');
+  if (OV[last]) ovOpen(last);
   setInterval(() => { if (BG.on && document.visibilityState === 'visible') appCard(); }, 10000);
+  setInterval(skyCheck, 30000); // 止まっている間（位置が届かない間）も見張る
   document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') appCard(); });
 }
