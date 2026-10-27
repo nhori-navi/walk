@@ -102,13 +102,14 @@ async function sumSave(o) {
     const keep = Object.assign({}, o); delete keep.meguOpen;
     a.push(keep); a.sort((x, y) => x.t0 - y.t0);
     await trkDo('readwrite', st => st.put(a, 'walks'));
+    if (typeof NK !== 'undefined') NK.at = 0; // 版26：散歩日記を読み直す
   } catch (e) {}
 }
 // ---------- 見せる ----------
 const sumName = (list, f, max = 5) => list.slice(0, max).map(f).join('・') + (list.length > max ? `（ほか${list.length - max}）` : '');
-function sumHtml(o) {
+// 版26：行だけを作る（散歩日記でも使う）
+function sumLines(o) {
   const L = [];
-  const avg = o.sec > 0 ? o.dist / o.sec * 3.6 : 0;
   if (o.newRoad >= 10) L.push(`🆕 はじめて歩いた道 <b>${fmtDist(o.newRoad)}</b>`);
   if (o.newMesh || o.done) L.push(`🟧 新しい踏破マス <b>${o.newMesh || 0}</b>` + (o.done ? `・🏆 完全制覇 <b>${o.done}</b>` : ''));
   if (o.stamps && o.stamps.length) { const nu = o.stamps.filter(s => s.neu); L.push(`⛩ スタンプ <b>${o.stamps.length}</b>` + (nu.length ? `（はじめて：${esc(sumName(nu, s => s.n, 3))}）` : '')); }
@@ -116,9 +117,13 @@ function sumHtml(o) {
   if (o.megu && o.megu.length) {
     const nu = o.megu.filter(m => m.k === 'new'), up = o.megu.filter(m => m.k === 'up');
     L.push(`🗾 MeguMiru：` + (nu.length ? `はじめて <b>${nu.length}</b>（${esc(sumName(nu, m => (MEGU_IC[m.sh] || '') + m.n))}）` : '') + (up.length ? `${nu.length ? '・' : ''}段階が上がった ${up.length}` : ''));
-  } else if (typeof IN_APP !== 'undefined' && IN_APP && !o.meguOpen) L.push('<span class="sub">🗾 MeguMiru を開くと、この散歩で通った場所が入ります</span>');
+  } else if (typeof IN_APP !== 'undefined' && IN_APP && o.meguOpen === false) L.push('<span class="sub">🗾 MeguMiru を開くと、この散歩で通った場所が入ります</span>');
   if (o.ten && o.ten.length) L.push('✈️ TenMiru：' + esc(sumName(o.ten, e => (e.cs || e.ty) + (e.route ? ' ' + e.route : '') + (e.k === 'catch' ? '（キャッチ）' : e.k === 'mil' ? '（軍用機）' : '（真上）'), 4)));
   if (o.yama && o.yama.length) L.push('🏔 YamaMiru：' + esc(sumName(o.yama, e => e.n + (e.first ? '（はじめて）' : ''))));
+  return L;
+}
+function sumHtml(o) {
+  const L = sumLines(o), avg = o.sec > 0 ? o.dist / o.sec * 3.6 : 0;
   return `<div class="ch">🏁 散歩のまとめ<span class="sub">${hm(new Date(o.t0))}〜${hm(new Date(o.t1))}</span></div>` +
     `<div class="sbig">${fmtDist(o.dist)}・${fmtTime(o.sec)}</div>` +
     `<div class="sub">平均 ${avg.toFixed(1)}km/h${o.up >= 1 ? `・上り ${o.up}m` : ''}・${o.kcal}kcal</div>` +
