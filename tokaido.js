@@ -132,7 +132,17 @@ function tkDraw(d, fly) {
   tkHere = here;
   if (!tkMarker) { const el = document.createElement('div'); el.className = 'tkme'; el.textContent = '🚶'; tkMarker = new mapboxgl.Marker({element: el}); }
   tkMarker.setLngLat(here).addTo(map);
-  if (fly) { const wait = Math.max(0, 1200 - (Date.now() - tkOpenAt)); setTimeout(() => { if (tkOn()) map.flyTo({center: here, zoom: 13, duration: 2000}); }, wait); } // 版27：引いてから寄る
+  // 版29：すっと引いた全体を少し見せてから（引き 1.8秒＋2秒置く）、今の位置を真ん中に全体の4分の1くらいの広さへ、ゆっくり寄る（2.8秒）。
+  // 置いている間に地図を指で動かしたら、寄らない（見ている地図を取り上げない）
+  if (fly) {
+    const wait = Math.max(0, TK_CAM.out + TK_CAM.hold - (Date.now() - tkOpenAt)), my = tkOpenAt;
+    clearTimeout(tkCamTimer);
+    tkCamTimer = setTimeout(() => {
+      if (!tkOn() || tkTouched || my !== tkOpenAt) return;
+      let z = 8; try { z = map.cameraForBounds(tkAllBB(), {padding: 30}).zoom + 2; } catch (e) {}
+      map.easeTo({center: here, zoom: Math.min(13, Math.max(6, z)), duration: TK_CAM.in, easing: tkEase});
+    }, wait);
+  }
   const nx = TOKAIDO[w.i + 1], ng = d.secs.filter(s => !s.ok).length - 1; // 七里の渡しは数えない
   const ll = `${here[1].toFixed(6)},${here[0].toFixed(6)}`;
   // 帯の1行：「🏯 品川宿＋8.1km・川崎宿まで 1.7km」。詳しいことは ⓘ の中
@@ -151,12 +161,18 @@ function tkDraw(d, fly) {
 }
 // 版27：押したらすぐ地図を切り替えて、日本橋〜京都の全体まで引いてから、今の位置へ寄る（旅の地図と同じ引きの動き）。
 // 初めの1回は道筋を取ってくるので、準備中をはっきり出す。準備中にもう一度押したら、待っていることを知らせる
-let tkBusy = false, tkOpenAt = 0;
+let tkBusy = false, tkOpenAt = 0, tkCamTimer = null, tkTouched = false;
+const TK_CAM = {out: 1800, hold: 2000, in: 2800};          // 引く・置く・寄るの時間（ミリ秒）
+const tkEase = t => t < .5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2; // ゆっくり始まり、ゆっくり止まる
+function tkAllBB() { let w = 180, s = 90, e = -180, n = -90; TK_POS.forEach(p => { w = Math.min(w, p[0]); e = Math.max(e, p[0]); s = Math.min(s, p[1]); n = Math.max(n, p[1]); }); return [[w, s], [e, n]]; }
+// 指で地図を動かしたら、あとから自動で寄らない（地図ができてから、初めて開いたときに付ける）
+let tkTouchOn = false;
+function tkTouchSetup() { if (tkTouchOn) return; tkTouchOn = true; ['dragstart', 'touchstart', 'wheel'].forEach(ev => map.on(ev, () => { if (tkOn()) tkTouched = true; })); }
 async function tkOpen() {
   if (mapMode === 'tk') { status(tkBusy ? '⏳ 旧東海道の道筋を取ってきています。もう少しお待ちください' : '東海道の地図を開いています（閉じるのは下の帯の ✕）'); return; }
   if (!modeOpen('tk', tkClear)) return;
-  tkOpenAt = Date.now();
-  try { let w = 180, s = 90, e = -180, n = -90; TK_POS.forEach(p => { w = Math.min(w, p[0]); e = Math.max(e, p[0]); s = Math.min(s, p[1]); n = Math.max(n, p[1]); }); map.fitBounds([[w, s], [e, n]], {padding: 30, duration: 1000}); } catch (e) {}
+  tkTouchSetup(); tkOpenAt = Date.now(); tkTouched = false;
+  try { map.fitBounds(tkAllBB(), {padding: 30, duration: TK_CAM.out, easing: t => 1 - Math.pow(1 - t, 3)}); } catch (e) {}
   if (!tkData) { mbSet('🏯 ⏳ 東海道の地図を準備中…', ''); status('⏳ 東海道の地図を準備中…（初めの1回は旧東海道の道筋を取ってくるので、1〜2分かかることがあります）'); }
   tkBusy = true;
   let d; try { d = await tkLoad(); } finally { tkBusy = false; }
