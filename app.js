@@ -150,10 +150,11 @@ function setFollow(v) {
   if (v) { clearTimeout(followTimer); cam(); }
 }
 // 歩行中に地図を触ったら、最後に触ってから20秒で追従に戻す
+// 版28：東海道の地図・旅の地図を開いている間は戻さない（開いた地図が20秒で今いる場所へ飛んでしまっていた）
 function touchedMap() {
   if (follow) return;
   clearTimeout(followTimer);
-  if (walk && $('autoFollowChk').checked) followTimer = setTimeout(() => { if (walk && !follow) setFollow(true); }, 20000);
+  if (walk && $('autoFollowChk').checked) followTimer = setTimeout(() => { if (walk && !follow && !mapMode) setFollow(true); }, 20000);
 }
 function cam() {
   if (!follow || !pos) return;
