@@ -423,7 +423,9 @@ $('unexp').onchange = () => { if (route) calc(); };
 $('slope').onchange = () => { if (route) calc(); };
 $('foot').onchange = () => { if (route) calc(); };
 $('poiN').onchange = () => { if (route && poiKinds().length) calc(); };
-['poiShrine', 'poiTemple', 'poiPark'].forEach(id => $(id).onchange = () => {
+$('omMixChk').checked = getLS('walk_ommix') !== '0'; // 版33
+$('omMixChk').onchange = () => lsSet('walk_ommix', $('omMixChk').checked ? '1' : '0');
+['poiShrine', 'poiTemple', 'poiPark', 'poiMegu', 'poiMesh'].forEach(id => $(id).onchange = () => {
   if (poiKinds().length && mode === 'to' && $('ext').value === '0') { $('ext').value = '500'; status('寄り道のため、延長を＋500mにしました（寄り道で遠回りしてよい上限です）'); }
   if (route) calc();
 });
@@ -617,18 +619,32 @@ async function calcLoop() {
 }
 async function calcLoop0(om) {
   if (!loopStart) loopStart = origin().slice(); // 出発点は「周回コースを作る」を押した場所（または地図で選んだ出発地）に固定
-  const T = Number($('loopKm').value) * 1000, from = loopStart;
+  const pick = vias.length ? null : loopPick; loopPick = null; // 版33：今日のおすすめの「通る周回」（その場所を通る、距離の指定に合わせた輪）
+  let T = Number($('loopKm').value) * 1000, msg = '';
+  const from = loopStart;
+  if (pick) { const need = Math.ceil(distM(from, pick.p) * 2.6 / 500) * 500; if (need > T) { T = need; msg = `　※${pick.name}まで遠いので、距離を ${fmtDist(T)} にしました`; } }
   const r = T / (3 * 1.25);
   cmpText = ''; cmpCoords = null; setData('cmp', []);
   if (vias.length) await ensureGraph(bboxOf([from, ...vias], MARGIN), bboxOf([from, ...vias], MARGIN + 500));
+  else if (pick) await ensureGraph(bboxOf([from, pick.p], r * 1.3 + MARGIN), bboxOf([from, pick.p], r * 1.3 + MARGIN + 500));
   else await ensureGraph(bboxOf([from], r * 1.3 + MARGIN), bboxOf([from], r * 1.3 + MARGIN + 500));
   await ensureElev(graph);
   markWalked(graph); // 歩いている途中の道も「歩いた道」に含める
   status('周回コースを探しています…'); await pause();
   const g = graph, s0 = snap(g, from);
   if (s0.i < 0) throw new Error('近くに歩ける道が見つかりません');
-  let list, msg = '';
-  if (vias.length) {
+  let list;
+  if (pick) {
+    const node = nearNode(g, pick.p, 300);
+    if (node === null) throw new Error(`${pick.name}の近くに歩ける道が見つかりません`);
+    const stop = Object.assign({kind: 'megu', fix: 1, visited: 0}, pick, {node});
+    list = await poiLoopN(g, s0, from, T, [stop], 1);
+    if (!list.length) { // 輪にならないときは、行って戻る
+      const idx = legsPath(g, [s0.i, node, s0.i], true);
+      if (!idx) throw new Error(`${pick.name}を通る周回コースが見つかりませんでした`);
+      list = [{idx, stops: [stop]}]; msg += '　※輪にならなかったので、行って戻るコースです';
+    }
+  } else if (vias.length) {
     // 経由地があるときは、出発点→経由地（タップ順）→出発点。2か所以上なら逆回りも「別の案」に
     const vs = vias.map(p => snap(g, p).i);
     if (vs.some(i => i < 0)) throw new Error('経由地の近くに歩ける道が見つかりません');
@@ -646,10 +662,15 @@ async function calcLoop0(om) {
       } catch (e) { showErr('神社・寺・公園の' + e.message + '。寄り道なしで計算します'); list = []; }
     }
     if (!list || !list.length) list = loopCands(g, s0, from, T, r);
+    // 版33：おまかせには、MeguMiru のまだの場所・あと少しのマスを1つ通る案を2つまで混ぜる（設定で切にできる）
+    if (om && !kinds.length && getLS('walk_ommix') !== '0') {
+      try { const mx = await omMix(g, s0, from, T); if (mx.length) { list = list.slice(0, 6 - mx.length).concat(mx); msg += '　※まだの場所・あと少しのマスを通る案も混ぜています'; } } catch (e) {}
+    }
   }
   if (!om) list = orientLoops(g, list);
   cands = list.map(c => makeCand(g, c, [from].concat(toCoords(g, c.idx), [from]), {pts: [from], baseTotal: null, loop: true, T: vias.length ? 0 : T, dir: loopArea(g, c.idx) > 0 ? '反時計回り' : '時計回り'}));
   if (!vias.length) sortCands(om ? 'un' : null);
+  if (om) { const mx = cands.filter(c => c.mix), rest = cands.filter(c => !c.mix); if (mx.length && rest.length) cands = [rest[0], ...mx, ...rest.slice(1)]; } // 混ぜた案は2番目から
   candIdx = 0; $('altBtn').disabled = cands.length < 2;
   showRoute();
   status(`周回コース 計算完了 ${nowHM()}（道のデータ：${g.from}）矢印の向きに歩いてください` +
@@ -661,7 +682,7 @@ async function calcLoop0(om) {
 function makeCand(g, c, coords, o) {
   const prof = makeProf(g, c.idx, coords);
   const turns = computeTurns(g, c.idx, coords, prof).concat(stopTurns(c.idx, coords, c.stops)).sort((a, b) => a.d - b.d);
-  return Object.assign({idx: c.idx, coords, rev: !!c.rev, stops: c.stops || null, ur: unexpRatio(g, c.idx), prof, turns}, o);
+  return Object.assign({idx: c.idx, coords, rev: !!c.rev, stops: c.stops || null, mix: !!c.mix, ur: unexpRatio(g, c.idx), prof, turns}, o);
 }
 // 距離を指定した周回コースの候補
 // 版19：8方向 × 大きさ3通り（＋開き90°の案）で探し、±35%（最低400m）までの似ていない案を6つまで
@@ -710,12 +731,25 @@ function renderCands() {
   const hasRec = tracks.some(t => t.k !== 'veh'), loopSort = route && route.loop && cands.every(c => c.T);
   const how = getLS('walk_loopsort') === 'len' ? 'len' : 'un';
   box.innerHTML = (loopSort ? `<div class="csort">並び：<button data-s="un" class="${how === 'un' ? 'on' : ''}">未踏破が多い順</button><button data-s="len" class="${how === 'len' ? 'on' : ''}">距離が近い順</button></div>` : '') +
-    cands.map((c, i) => `<button class="cand${i === candIdx ? ' on' : ''}" data-i="${i}">案${i + 1}　${fmtDist(c.len || candLen(c))}${hasRec ? `・未踏破 ${Math.round((c.ur ?? 1) * 100)}%` : ''}${c.dir && c.loop ? '・' + c.dir : ''}</button>`).join('');
+    cands.map((c, i) => `<button class="cand${i === candIdx ? ' on' : ''}" data-i="${i}">案${i + 1}　${fmtDist(c.len || candLen(c))}${hasRec ? `・未踏破 ${Math.round((c.ur ?? 1) * 100)}%` : ''}${c.stops && c.stops.length ? '・' + esc(c.stops.map(p => poiLabel(p).slice(0, 12)).join('・')) : c.dir && c.loop ? '・' + c.dir : ''}</button>`).join('');
   box.querySelectorAll('button.cand').forEach(b => b.onclick = () => { candIdx = Number(b.dataset.i); showRoute(); });
   box.querySelectorAll('.csort button').forEach(b => b.onclick = () => { lsSet('walk_loopsort', b.dataset.s); sortCands(b.dataset.s); showRoute(); });
 }
 // 版19：おまかせ散歩（いまいる所から周回。距離は前回の選択、向きはおまかせ、未踏破を強めに探して多い順）
-let loopOm = false;
+let loopOm = false, loopPick = null; // 版33：loopPick＝{p, name, ic, kind}（今日のおすすめの「通る周回」）
+// 版33：おまかせに混ぜる案（まだの場所を先に、次にあと少しのマス。違う場所を通るものを2つまで）
+async function omMix(g, s0, from, T) {
+  const pois = (await poisFor(g, ['megu', 'mesh'])).filter(p => distM(from, p.p) >= 50 && distM(from, p.p) <= T / 2.2);
+  if (!pois.length) return [];
+  pois.forEach(p => { p.visited = 0; });
+  const cand = pois.sort((a, b) => ((a.kind === 'megu' ? 0 : 1) - (b.kind === 'megu' ? 0 : 1)) || (Math.abs(distM(from, a.p) - T / 5) - Math.abs(distM(from, b.p) - T / 5))).slice(0, 6);
+  const out = [], seen = new Set();
+  for (const c of await poiLoopN(g, s0, from, T, cand, 1)) {
+    const k = c.stops && c.stops[0] ? c.stops[0].name + c.stops[0].p.join() : '';
+    if (out.length < 2 && k && !seen.has(k)) { seen.add(k); out.push(Object.assign(c, {mix: 1})); }
+  }
+  return out;
+}
 $('omBtn').onclick = () => { if (typeof rmSet === 'function') rmSet('loop'); loopOm = true; $('loopBtn').click(); };
 
 // ---------- 版11：組み直し（道を外れたとき・「組み直す」） ----------

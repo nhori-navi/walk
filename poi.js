@@ -1,8 +1,8 @@
 // MichiMiru：寄り道（神社・寺・公園）
 
 // ---------- 寄り道（神社・寺・公園） ----------
-const poiKinds = () => [['poiShrine', 'shrine'], ['poiTemple', 'temple'], ['poiPark', 'park']].filter(([id]) => $(id).checked).map(x => x[1]);
-const poiLabel = p => POI[p.kind].ic + (p.name || '名前なしの' + POI[p.kind].nm);
+const poiKinds = () => [['poiShrine', 'shrine'], ['poiTemple', 'temple'], ['poiPark', 'park'], ['poiMegu', 'megu'], ['poiMesh', 'mesh']].filter(([id]) => $(id) && $(id).checked).map(x => x[1]);
+const poiLabel = p => (p.ic || POI[p.kind].ic) + (p.name || '名前なしの' + POI[p.kind].nm);
 // 道の網の地点を100m四方のマスに分けて、近い地点をすばやく探せるようにする
 function nearNode(g, p, maxD) {
   if (!g.grid) {
@@ -45,8 +45,44 @@ async function loadPois(g, quiet) {
   g.poiList = out; // スタンプ帳で使う
   return out;
 }
+// ---------- 版33：MeguMiru のまだの場所・行き先ピン（megu）と、あと少しのマス（mesh）も寄り道に ----------
+const POI_BASE = ['shrine', 'temple', 'park'];
+async function poisFor(g, kinds) {
+  const out = kinds.some(k => POI_BASE.includes(k)) ? (await ensurePois(g)).slice() : [];
+  if (kinds.includes('megu')) out.push(...await meguStops(g));
+  if (kinds.includes('mesh')) out.push(...meshStops(g));
+  return out;
+}
+const inBBp = (bb, p) => p[0] >= bb.w && p[0] <= bb.e && p[1] >= bb.s && p[1] <= bb.n;
+// MeguMiru の置き場（osusume.js の osNearLoad が読む）から、道のデータの範囲にあるまだの場所（史跡・ミュージアム・道の駅）と行き先ピン（今日・明日・日付なし）
+async function meguStops(g) {
+  if (typeof osNearLoad === 'function') { try { await osNearLoad(false); } catch (e) {} }
+  const nr = typeof OS !== 'undefined' && OS.nr; if (!nr) return [];
+  const IC = {mu: '🏛', hi: '🏯', mi: '🛣'}, out = [], today = ymd(Date.now()), tmw = ymd(Date.now() + 864e5);
+  const add = (p, o) => { if (!inBBp(g.bb, p)) return; const node = nearNode(g, p, 200); if (node === null) return; out.push(Object.assign({kind: 'megu', p, node, fix: 1}, o)); };
+  (nr.spots || []).forEach(s => { if (!s || s.x == null || !IC[s.sh]) return; const r = nr.rec && nr.rec[s.id]; if (r && r.lv >= 2) return; add([s.x, s.y], {ic: IC[s.sh], name: s.n, mid: s.id}); });
+  (nr.plans || []).forEach(q => { if (!q || q.x == null || (q.d && q.d !== today && q.d !== tmw)) return; add([q.x, q.y], {ic: '📌', name: q.n || '行き先ピン'}); });
+  return out;
+}
+// あと少しのマス（残り200m 以下）：まだ歩いていない道のうち、いちばん長い線のまん中を通る（1回で完全制覇にならないこともある）
+function meshVia(m, key) {
+  const b = meshBB(key); let via = [(b.w + b.e) / 2, (b.s + b.n) / 2];
+  const ln = (m.rem || []).slice().sort((x, y) => cumOf(y).at(-1) - cumOf(x).at(-1))[0];
+  if (ln && ln.length > 1) { const cm = cumOf(ln); via = pointAt(ln, cm, cm.at(-1) / 2) || ln[0]; }
+  return via;
+}
+function meshStops(g) {
+  if (typeof calcMesh !== 'function') return [];
+  const out = [];
+  calcMesh(g).forEach((m, key) => {
+    if (meshDone[key] || !m.W || meshRest(m) > NEAR_M) return;
+    const p = meshVia(m, key), node = nearNode(g, p, 80); if (node === null) return;
+    out.push({kind: 'mesh', p, node, fix: 1, name: 'あと少しのマス', rest: meshRest(m)});
+  });
+  return out;
+}
 // 行ったことがあるか（最寄りの道を歩いた記録があるか）
-function markVisited(g, pois) { pois.forEach(p => { p.visited = g.adj[p.node].some(([, e]) => e.k) ? 1 : 0; }); }
+function markVisited(g, pois) { pois.forEach(p => { p.visited = p.fix ? 0 : g.adj[p.node].some(([, e]) => e.k) ? 1 : 0; }); } // 版33：まだの場所・マス（fix）はいつも「まだ」
 const fewerMsg = list => {
   const N = Number($('poiN').value) || 1, n = Math.max(...list.map(c => c.stops.length));
   return n < N ? `　※${N}か所は入らなかったので、${n}か所にしました` : '';
@@ -58,7 +94,7 @@ function combos(a, n) {
 }
 // 目的地まで：遠回りの上限X以内で寄れる場所を選び、通る順に並べた案を最大3つ
 async function poiRouteTo(g, s, t, from, dest, baseLen, X, kinds) {
-  const pois = (await ensurePois(g)).filter(p => kinds.includes(p.kind));
+  const pois = (await poisFor(g, kinds)).filter(p => kinds.includes(p.kind));
   markVisited(g, pois);
   const N = Number($('poiN').value) || 1, D = distM(from, dest);
   const k = Math.cos(from[1] * Math.PI / 180) * 111320, m = 110540;
@@ -91,7 +127,7 @@ async function poiToN(g, s, t, from, dest, baseLen, X, cand, n, D) {
 }
 // 周回：出発点のまわりの場所を結んで、指定の距離に近い輪を作る（1か所のときは補助の点を足して輪にする）
 async function poiRouteLoop(g, s0, from, T, kinds) {
-  const pois = (await ensurePois(g)).filter(p => kinds.includes(p.kind) && distM(from, p.p) >= 50 && distM(from, p.p) <= T / 2.2);
+  const pois = (await poisFor(g, kinds)).filter(p => kinds.includes(p.kind) && distM(from, p.p) >= 50 && distM(from, p.p) <= T / 2.2);
   markVisited(g, pois);
   const N = Number($('poiN').value) || 1;
   const cand = pois.sort((a, b) => (a.visited - b.visited) || (Math.abs(distM(from, a.p) - T / 5) - Math.abs(distM(from, b.p) - T / 5))).slice(0, 8);

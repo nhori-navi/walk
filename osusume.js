@@ -1,4 +1,4 @@
-// osusume.js：版32 散歩の前の「☀ 今日のおすすめ」（nikki.js のあとに読み込む）
+// osusume.js：版32 散歩の前の「☀ 今日のおすすめ」（nikki.js のあとに読み込む）。版33：「通る周回」は距離の指定に合わせた輪（app.js の loopPick）
 // ルートタブの「🎲 おまかせで歩く」のすぐ上に1枚。ルートがあるとき・歩いているときは隠す（おまかせボタンと同じ）
 // ・🗻 山の見え方：YamaMiru の「見える？予報」と同じ計算。YamaMiru の⭐お気に入りが1km以内にあればその山、なければ富士山（150km より遠ければ出さない）
 //   天気は YamaMiru の保存（yama_wx_v1）が新しければそれ、なければ自分で Open-Meteo に聞いて walk_wx_v1 に（1時間に1回まで）
@@ -196,14 +196,10 @@ function osMeshRow(here) {
     if (meshDone[key] || !m.W || meshRest(m) > NEAR_M) return;
     const b = meshBB(key), c = [(b.w + b.e) / 2, (b.s + b.n) / 2], d = distM(here, c);
     if (d > OS_MESH_R) return;
-    k++; if (!best || d < best.d) best = {d, c, rest: meshRest(m), m};
+    k++; if (!best || d < best.d) best = {d, c, rest: meshRest(m), m, key};
   });
   if (!k) { OS.mesh = null; return null; }
-  // 経由地：まだ歩いていない道のうち、いちばん長い線のまん中
-  let via = best.c;
-  const ln = (best.m.rem || []).slice().sort((a, b) => cumOf(b).at(-1) - cumOf(a).at(-1))[0];
-  if (ln && ln.length > 1) { const cm = cumOf(ln); via = pointAt(ln, cm, cm.at(-1) / 2) || ln[0]; }
-  OS.mesh = {p: via};
+  OS.mesh = {p: meshVia(best.m, best.key)}; // 経由する点：まだ歩いていない道のうち、いちばん長い線のまん中（poi.js）
   return {k: 'mesh', mini: `🟧${k}`, html: `<div class="osRow osRowB"><span class="ic">🟧</span><span class="tx"><b>あと少しで完全制覇のマス ${k}個</b><br><span class="sub">いちばん近いのは ${osDir(here, best.c)} ${fmtDist(best.d)}・残りの道 ${fmtDist(best.rest)}</span></span><button class="osSm" id="osMeshVia">通る周回</button></div>`};
 }
 
@@ -234,14 +230,15 @@ function osGo(p, name) {
   destName = name || ''; setDest(p);
   status(`「${name}」へのルートを作ります`);
 }
-function osVia(p, name) {
+// 版33：その場所を通る、距離（km）の指定に合わせた周回（app.js の loopPick。遠いときは距離を延ばす）
+function osVia(p, name, ic, kind) {
   if (osBusy()) return;
   if (typeof rmSet === 'function') rmSet('loop');
   dest = null; clearVia(); loopStart = null; if (typeof clearTrip === 'function') clearTrip();
   if (destMarker) { destMarker.remove(); destMarker = null; }
   $('favAdd').disabled = true; $('recalcBtn').disabled = false;
-  vias = [p]; drawVias();
-  status(`「${name}」を通って戻ってくる周回コースを作ります`);
+  loopPick = {p, name, ic: ic || '', kind: kind || 'megu'};
+  status(`「${name}」を通る周回コースを作ります`);
   calc('loop');
 }
 function osRender() {
@@ -284,12 +281,12 @@ function osTick(force) {
     const b = e.target.closest('button'); if (!b) return;
     if (b.id === 'osHead') { OS.open = !OS.open; lsSet('walk_os_open', OS.open ? '1' : '0'); osRender(); return; }
     if (b.id === 'osNearBtn') { OS.nearOpen = !OS.nearOpen; osRender(); return; }
-    if (b.id === 'osMeshVia') { if (OS.mesh) osVia(OS.mesh.p, 'あと少しのマス'); return; }
+    if (b.id === 'osMeshVia') { if (OS.mesh) osVia(OS.mesh.p, 'あと少しのマス', '🟧', 'mesh'); return; }
     if (b.dataset.os) { osOpenApp(b.dataset.os); return; }
     const it = OS.items || [], i = Number(b.dataset.go ?? b.dataset.via ?? b.dataset.see), x = it[i];
     if (!x) return;
     if (b.dataset.go != null) osGo(x.p, x.n);
-    else if (b.dataset.via != null) osVia(x.p, x.n);
+    else if (b.dataset.via != null) osVia(x.p, x.n, x.ic, 'megu');
     else osOpenApp('megu', x.k === 'spot' ? x.id : null);
   });
   window.addEventListener('storage', e => { if (e.key && /^(sora_iss_v1|yama_fav_v1|yama_wx_v1)$/.test(e.key)) osRender(); });

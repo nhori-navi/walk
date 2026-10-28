@@ -502,8 +502,9 @@ function todayNew() {
   return m;
 }
 function updToday() {
-  const s = todayStats(), nu = todayNew();
-  $('today').textContent = s.dist >= 1 ? `今日：${fmtDist(s.dist)}・${fmtTime(s.sec)}・${Math.round(s.kcal)}kcal` + (graph ? `・未踏破 ${fmtDist(nu)}` : '') : '今日：まだ歩いた記録がありません';
+  // 版33：はじめて歩いた道は、散歩のまとめの合計と、いま読み込んでいる道のデータで数えた分の多い方（道のデータの外を歩いた日に 0m と出ていた）
+  const s = todayStats(), nu = Math.max(todayNew(), typeof nkTodayNew === 'function' ? nkTodayNew() : 0);
+  $('today').textContent = s.dist >= 1 ? `今日：${fmtDist(s.dist)}・${fmtTime(s.sec)}・${Math.round(s.kcal)}kcal` + (graph || nu ? `・はじめて歩いた道 ${fmtDist(nu)}` : '') : '今日：まだ歩いた記録がありません';
 }
 function afterTracksChanged() {
   if (graph) markWalked(graph);

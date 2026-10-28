@@ -115,12 +115,13 @@ function sumLines(o) {
   if (o.newRoad >= 10) L.push(`🆕 はじめて歩いた道 <b>${fmtDist(o.newRoad)}</b>`);
   if (o.newMesh || o.done) L.push(`🟧 新しい踏破マス <b>${o.newMesh || 0}</b>` + (o.done ? `・🏆 完全制覇 <b>${o.done}</b>` : ''));
   if (o.stamps && o.stamps.length) { const nu = o.stamps.filter(s => s.neu); L.push(`⛩ スタンプ <b>${o.stamps.length}</b>` + (nu.length ? `（はじめて：${esc(sumName(nu, s => s.n, 3))}）` : '')); }
-  if (o.tk && o.tk.km >= 0.1) L.push(`🏯 東海道 <b>+${o.tk.km.toFixed(1)}km</b>` + (o.tk.reach.length ? `（${esc(o.tk.reach.join('・'))}に着きました）` : ''));
+  if (o.tk && o.tk.reach && o.tk.reach.length) L.push(`🏯 東海道：<b>${esc(o.tk.reach.join('・'))}</b>に着きました`); // 版33：進んだ距離は歩いた距離と同じなので出さない
   if (o.megu && o.megu.length) {
     const nu = o.megu.filter(m => m.k === 'new'), up = o.megu.filter(m => m.k === 'up');
     L.push(`🗾 MeguMiru：` + (nu.length ? `はじめて <b>${nu.length}</b>（${esc(sumName(nu, m => (MEGU_IC[m.sh] || '') + m.n))}）` : '') + (up.length ? `${nu.length ? '・' : ''}段階が上がった ${up.length}` : ''));
   } else if (typeof IN_APP !== 'undefined' && IN_APP && o.meguOpen === false) L.push('<span class="sub">🗾 MeguMiru を開くと、この散歩で通った場所が入ります</span>');
-  if (o.ten && o.ten.length) L.push('✈️ TenMiru：' + esc(sumName(o.ten, e => (e.cs || e.ty) + (e.route ? ' ' + e.route : '') + (e.k === 'catch' ? '（キャッチ）' : e.k === 'mil' ? '（軍用機）' : '（真上）'), 4)));
+  const ov = (o.ten || []).filter(e => e.k === 'over'); // 版33：飛行機は真上を通ったものだけ
+  if (ov.length) L.push(`✈️ 真上を通った飛行機 <b>${ov.length}機</b>（` + esc(sumName(ov, e => (e.cs || e.ty) + (e.route ? ' ' + e.route : ''), 4)) + '）');
   if (o.yama && o.yama.length) L.push('🏔 YamaMiru：' + esc(sumName(o.yama, e => e.n + (e.first ? '（はじめて）' : ''))));
   return L;
 }

@@ -366,7 +366,7 @@ body.dark .me .dot{left:5px;top:5px;width:24px;height:24px;border-width:3px;box-
     if (v('unexp') !== '1') t.push('未踏破 ' + nm('unexp'));
     if (v('slope') !== '0') t.push(v('slope') === '1' ? '坂を避ける' : '坂を選ぶ');
     if (v('foot') !== '0') t.push('遊歩道 ' + nm('foot'));
-    const poi = [['poiShrine', '⛩'], ['poiTemple', '卍'], ['poiPark', '🌳']].filter(([id]) => $(id).checked).map(([, ic]) => ic).join('');
+    const poi = [['poiShrine', '⛩'], ['poiTemple', '卍'], ['poiPark', '🌳'], ['poiMegu', '🗾'], ['poiMesh', '🟧']].filter(([id]) => $(id).checked).map(([, ic]) => ic).join('');
     if (poi) t.push('寄り道 ' + poi + '×' + v('poiN'));
     if (v('ext') !== '0') t.push('延長 ' + nm('ext'));
     return t.length ? '：' + t.join('・') : '：ふつう（最短）';
