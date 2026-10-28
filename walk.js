@@ -29,7 +29,7 @@ function walkAdd(a, p, now) {
   if (!isNaN(eh)) {
     if (walk.eRef === null) walk.eRef = eh;
     else if (eh - walk.eRef >= 2) { walk.up += eh - walk.eRef; walk.kcal += weight() * (eh - walk.eRef) * 0.0094; walk.eRef = eh; }
-    else if (walk.eRef - eh >= 2) walk.eRef = eh;
+    else if (walk.eRef - eh >= 2) { walk.down = (walk.down || 0) + (walk.eRef - eh); walk.eRef = eh; } // 版31：下りは高さだけ残す（ゆるい下りは平らな道より楽なので、カロリーには足さない）
   }
 }
 // ---------- 版21：乗り物の区間 ----------
@@ -205,7 +205,7 @@ function saveSession() {
     if (!walk) { localStorage.removeItem('walk_session'); return; }
     const r = route && {coords: route.coords, pts: route.pts, baseTotal: route.baseTotal, loop: route.loop, ur: route.ur,
       prof: route.prof, turns: route.turns, prog: route.prog};
-    lsSet('walk_session', JSON.stringify({t0: walk.t0, dist: walk.dist, kcal: walk.kcal, up: walk.up, s0: walk.s0,
+    lsSet('walk_session', JSON.stringify({t0: walk.t0, dist: walk.dist, kcal: walk.kcal, up: walk.up, down: walk.down || 0, s0: walk.s0,
       saved: Date.now(), dest, destName, mode, route: r}));
   } catch (e) {}
 }
@@ -260,7 +260,7 @@ function restoreSession() {
   }
   let track = tracks.find(t => t.k === 'walk' && t.t0 === s.t0);
   if (!track) { track = {k: 'walk', t0: s.t0, t1: s.t0, kcal: 0, pts: [], ts: [], ses: s.t0}; tracks.push(track); }
-  startWalk({t0: s.t0, dist: s.dist, kcal: s.kcal, up: s.up || 0, s0: s.s0, track, note: '前回の歩行を続きから再開しました', noteUntil: Date.now() + 20000});
+  startWalk({t0: s.t0, dist: s.dist, kcal: s.kcal, up: s.up || 0, down: s.down || 0, s0: s.s0, track, note: '前回の歩行を続きから再開しました', noteUntil: Date.now() + 20000});
   status('前回の歩行を続きから再開しました');
 }
 
