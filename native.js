@@ -2,6 +2,7 @@
 // 版21：MeguMiru を重ねて開く・戻るボタン。版22：TenMiru・YamaMiru も重ねて開く、スマホの通知（ISS の予約・散歩中の上空の見張り）
 // 版23：重ねて開いている間の「戻る帯」（画面の上）、地図の右の ▦ にまとめた、MeguMiru に MichiMiru の位置を渡す
 // 版24：▦ の枠と戻る帯に、それぞれのアプリの版（GitHub に新しい版が出ていれば知らせる）
+// 版30：通知の種類（チャンネル）を2つ作る＝「曲がり角の案内」「散歩中の知らせ」（振動あり・目立つ）。画面を消している間の曲がり角は振動つきの通知で
 // 版27：散歩中に MeguMiru の「近くのまだ行っていない場所」も通知（meguNearCheck）、版の「今すぐ入れる」
 // 版25：散歩中に知らせた飛行機を walk_skylog に残す（散歩のまとめに出す）。版23 の fmtDist（base.js と同じ名前）を外した
 // ・歩いている間は「裏の記録」（BackgroundGeolocation）で位置を受け取り、いつもの記録（walkStep）に入れる
@@ -312,13 +313,28 @@ const hhmm = t => { const d = new Date(t); return String(d.getHours()).padStart(
 const mdw = t => { const d = new Date(t); return `${d.getMonth() + 1}/${d.getDate()}（${'日月火水木金土'[d.getDay()]}）`; };
 function lsj(k, d) { try { const v = localStorage.getItem(k); return v == null ? d : JSON.parse(v); } catch (e) { return d; } }
 // いますぐ出す通知（exact の許可は要らないので isExactNotification:false）
-function ntNow(title, body, extra) {
+// 版30：通知の種類。Android は種類ごとに「振動する・目立つ（画面の上に出る）」を決める（一度作ると、あとはスマホの設定で変えられる）
+const NT_CH = {turn: 'miru_turn', walk: 'miru_walk'};
+let ntChReady = null;
+function ntChannels() {
+  if (!NT.ok) return Promise.resolve(false);
+  if (!ntChReady) ntChReady = Promise.all([
+    CAP.nativePromise('LocalNotifications', 'createChannel', {id: NT_CH.turn, name: '曲がり角の案内', description: '歩いているとき、画面を消していても曲がり角の手前で振動して知らせます', importance: 4, visibility: 1, vibration: true}),
+    CAP.nativePromise('LocalNotifications', 'createChannel', {id: NT_CH.walk, name: '散歩中の知らせ', description: '飛行機・宇宙ステーション・近くのまだ行っていない場所', importance: 4, visibility: 1, vibration: true})
+  ]).then(() => true, () => false);
+  return ntChReady;
+}
+// ch：'walk'（初め）か 'turn'。id を渡すと、同じ id の前の通知を置き換える
+function ntNow(title, body, extra, ch, id) {
   if (!NT.ok) return false;
-  const id = NT_NOW + (NT.seq++ % 800);
-  CAP.nativePromise('LocalNotifications', 'schedule', {notifications: [{id, title, body, smallIcon: 'ic_tracking', iconColor: '#2fbf71',
-    isExactNotification: false, extra: extra || {}}]}).catch(() => {});
+  id = id || NT_NOW + (NT.seq++ % 800);
+  ntChannels().then(ok => CAP.nativePromise('LocalNotifications', 'schedule', {notifications: [Object.assign({id, title, body, smallIcon: 'ic_tracking', iconColor: '#2fbf71',
+    isExactNotification: false, extra: extra || {}}, ok ? {channelId: NT_CH[ch || 'walk']} : {})]})).catch(() => {});
   return true;
 }
+// 版30：曲がり角の案内を通知で（画面を消しているときだけ。walk.js の maybeVibrate から）
+const NT_TURN = 7950;
+function ntTurn(title, body) { return ntNow(title, body, {}, 'turn', NT_TURN); }
 async function ntExact() {
   try { const s = await CAP.nativePromise('LocalNotifications', 'checkExactNotificationSetting', {}); NT.exact = !!(s && s.exact_alarm === 'granted'); }
   catch (e) { NT.exact = false; }
@@ -337,12 +353,13 @@ async function miruIssSchedule(passes) {
   await bgNotifPerm();
   try { await CAP.nativePromise('LocalNotifications', 'cancel', {notifications: Array.from({length: NT_ISS_N}, (_, i) => ({id: NT_ISS + i}))}); } catch (e) {}
   if (list.length) {
+    const chOk = await ntChannels(); // 版30：散歩中の知らせの種類（振動あり）
     try {
       await CAP.nativePromise('LocalNotifications', 'schedule', {notifications: list.map((p, i) => ({
         id: NT_ISS + i, title: `🛰 ${lead}分後に宇宙ステーションが見えます`,
         body: `${hhmm(p.s)}から ${p.from}の空 → ${p.to}へ（最大の高さ ${Math.round(p.max)}°）`,
         schedule: {at: new Date(p.s - lead * 60000).toISOString(), allowWhileIdle: true},
-        isExactNotification: exact, smallIcon: 'ic_tracking', iconColor: '#2fbf71', extra: {ov: 'sora'}}))});
+        isExactNotification: exact, smallIcon: 'ic_tracking', iconColor: '#2fbf71', extra: {ov: 'sora'}, ...(chOk ? {channelId: NT_CH.walk} : {})}))});
     } catch (e) { issSig = ''; return false; }
   }
   lsSet('walk_iss_sched', JSON.stringify({t: now, n: list.length, next: list[0] ? list[0].s : 0, exact}));
@@ -548,7 +565,7 @@ function appCard() {
 if (IN_APP) {
   appCard();
   if (walk) bgStart();   // 開き直して歩行を続きから再開したとき
-  backSetup(); ntTapSetup();
+  backSetup(); ntTapSetup(); ntChannels(); // 版30：通知の種類を先に作っておく
   if (NT.ok) ntExact().then(appCard);
   // 地図の右の丸いボタンに ▦（版23。押すと MeguMiru・TenMiru・YamaMiru）を足す。前回見ていたアプリがあれば、それを開いて始める
   if ($('mapBtns')) { ovStyle(); appsSetup(); }

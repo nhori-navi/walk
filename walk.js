@@ -131,10 +131,15 @@ function turnHtml() {
   return `<div class="turn${near ? ' now' : ''}">${ar ? `<span class="tar">${ar}</span>` : ''}<span class="ttx">${near ? 'まもなく' : fmtDist(n.dist) + '先'} <b>${tx}</b></span></div>`;
 }
 // 案内の40m手前で一度だけ振動する
+// 版30：画面を消しているとき（アプリ版）は、振動つきの通知で知らせる（画面の中からの振動は Android が止めるため）
 function maybeVibrate() {
-  if (!walk || !$('vibChk').checked || !CAN_VIB) return;
+  const bgTurn = typeof ntTurn === 'function' && typeof NT !== 'undefined' && NT.ok && document.visibilityState !== 'visible';
+  if (!walk || !$('vibChk').checked || (!CAN_VIB && !bgTurn)) return;
   const n = nextTurn();
-  if (n && n.dist <= 40 && !route.vib[n.t.d]) { route.vib[n.t.d] = 1; try { navigator.vibrate([200, 100, 200]); } catch (e) {} }
+  if (!(n && n.dist <= 40 && !route.vib[n.t.d])) return;
+  route.vib[n.t.d] = 1;
+  if (bgTurn) { const {ar, tx} = turnText(n.t); ntTurn(`${ar ? ar + ' ' : ''}まもなく ${tx}`, lastRemain != null ? `残り ${fmtDist(lastRemain)}` : ''); return; }
+  try { navigator.vibrate([200, 100, 200]); } catch (e) {}
 }
 function renderHud() {
   if (!walk) return;
