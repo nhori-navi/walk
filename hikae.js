@@ -5,7 +5,7 @@
 //   （MeguMiru の入れ物 megu／kv の 'pending_import' に置く）。TenMiru・YamaMiru の分は、記録がなければ入れ、あれば選んだときだけ置き換える
 // 同じアドレス（nhori-navi.github.io）の下にあるので、ほかのアプリの置き場も読める・書ける
 const HK = {DAYS: 7, KEEP: 4, DIR: 'MiruHikae', busy: false, plan: null};
-const SORA_SKIP = ['sora_routes_v1', 'sora_tle', 'sora_bk_last']; // TenMiru の書き出しと同じ（取り直せる一時保存など）
+const SORA_SKIP = ['sora_routes_v1', 'sora_tle', 'sora_bk_last', 'sora_iss_v1']; // TenMiru の書き出しと同じ（取り直せる一時保存など）
 const YAMA_BK = ['yama_zukan_v1', 'yama_quest_v1', 'yama_seen_v1', 'yama_fav_v1']; // YamaMiru の書き出しと同じ
 const YAMA_LS = ['yama_help_v1', 'yama_offset', 'yama_cam', 'yama_astro'];       // 足りないときだけ入れる設定
 const lsKeys = pre => { const a = []; try { for (let i = 0; i < localStorage.length; i++) { const k = localStorage.key(i); if (k && k.startsWith(pre)) a.push(k); } } catch (e) {} return a; };
