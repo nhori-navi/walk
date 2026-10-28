@@ -10,6 +10,8 @@
 const OS = {open: getLS('walk_os_open') !== '0', nearOpen: false, wxBusy: false, wxAt: 0, wxErr: '', nr: null, nrAt: 0, nrBusy: false, last: '', at: 0, ap: null};
 const OS_FUJI = {name: '富士山', p: [138.7274, 35.3606], h: 3776};
 const OS_WX_MIN = 60, OS_H0 = 5, OS_HN = 15, OS_SLOTS = [['朝', 6, 9], ['昼', 11, 14], ['夕', 15, 18]], OS_MARK = ['×', '△', '○', '◎'];
+const OS_APPIMG = {yama: '../yama/icon-192.png', sora: '../sora/icon-192.png', megu: '../megu/icons/icon-192.png'}; // 版35：押すと開くアプリのアイコン
+const osAppImg = id => OS_APPIMG[id] ? `<img class="osApp" src="${OS_APPIMG[id]}" alt="" onerror="this.remove()">` : '';
 const OS_SPOT_R = 1500, OS_FAR_R = 5000, OS_MESH_R = 1500;
 const OS_DIR8 = ['北', '北東', '東', '南東', '南', '南西', '西', '北西'];
 const osDir8 = az => OS_DIR8[Math.round((((az % 360) + 360) % 360) / 45) % 8];
@@ -106,13 +108,13 @@ function osWxRow(here) {
     : `<span class="sub">${OS.wxBusy ? '天気予報を取得中…' : esc(OS.wxErr || '天気予報を取得します')}</span>`;
   const best = has ? Math.max(...lv.slice(dd === 0 ? cs : 0).filter(v => v != null), -1) : -1;
   return {k: 'wx', mini: has ? `🗻${best >= 0 ? OS_MARK[best] : '－'}` : '🗻',
-    html: `<button class="osRow" data-os="yama"><span class="ic">🗻</span><span class="tx"><b>${esc(names)}</b> ${dd ? '明日' : '今日'}の見え方${tg.name ? `<span class="sub">（⭐${esc(tg.name)}から）</span>` : ''}<br>${marks}</span></button>`};
+    html: `<button class="osRow" data-os="yama"><span class="ic">🗻</span><span class="tx"><b>${esc(names)}</b> ${dd ? '明日' : '今日'}の見え方${tg.name ? `<span class="sub">（⭐${esc(tg.name)}から）</span>` : ''}<br>${marks}</span>${osAppImg('yama')}</button>`};
 }
 
 // ---------- 🛰 宇宙ステーション（TenMiru v42〜の sora_iss_v1） ----------
 function osIssRow(here) {
   const j = osLs('sora_iss_v1', null), now = Date.now();
-  const btn = (body, mini) => ({k: 'iss', mini, html: `<button class="osRow" data-os="sora"><span class="ic">🛰</span><span class="tx">${body}</span></button>`});
+  const btn = (body, mini) => ({k: 'iss', mini, html: `<button class="osRow" data-os="sora"><span class="ic">🛰</span><span class="tx">${body}</span>${osAppImg('sora')}</button>`});
   if (!j || !Array.isArray(j.list)) return btn('宇宙ステーション：<span class="sub">TenMiru を一度開くと、見える時刻が出ます</span>', '');
   const far = here && j.p && distM(here, j.p) > 30000;
   const nx = j.list.find(p => p && p.e > now);
@@ -176,11 +178,11 @@ function osNearRow(here) {
   const it = osNearItems(here);
   OS.items = it;
   if (!it.length) {
-    if (nr.none && !(nr.plans || []).length) return {k: 'near', mini: '', html: '<button class="osRow" data-os="megu"><span class="ic">📍</span><span class="tx">近くの行き先：<span class="sub">MeguMiru を一度開くと、まだ行っていない場所が出ます</span></span></button>'};
+    if (nr.none && !(nr.plans || []).length) return {k: 'near', mini: '', html: '<button class="osRow" data-os="megu"><span class="ic">📍</span><span class="tx">近くの行き先：<span class="sub">MeguMiru を一度開くと、まだ行っていない場所が出ます</span></span>' + osAppImg('megu') + '</button>'};
     return null;
   }
   const nearest = it.slice().sort((a, b) => a.d - b.d)[0];
-  let h = `<button class="osRow" id="osNearBtn"><span class="ic">📍</span><span class="tx"><b>近くの行き先 ${it.length}か所</b><span class="sub">（いちばん近い：${esc(nearest.n)} ${fmtDist(nearest.d)}）</span></span><i class="osArr">${OS.nearOpen ? '▴' : '▾'}</i></button>`;
+  let h = `<button class="osRow" id="osNearBtn"><span class="ic">📍</span><span class="tx"><b>近くの行き先 ${it.length}か所</b><span class="sub">（いちばん近い：${esc(nearest.n)} ${fmtDist(nearest.d)}）</span></span>${osAppImg('megu')}<i class="osArr">${OS.nearOpen ? '▴' : '▾'}</i></button>`;
   if (OS.nearOpen) {
     h += '<div class="osList">' + it.map((x, i) => `<div class="osIt"><div class="osItT">${x.ic} <b>${esc(x.n)}</b><span class="sub">${esc(x.sub)}・${osDir(here, x.p)} ${fmtDist(x.d)}</span></div>` +
       `<div class="osAct"><button data-go="${i}">ここへ歩く</button><button data-via="${i}">通る周回</button><button data-see="${i}">見る</button></div></div>`).join('') + '</div>';
@@ -268,6 +270,7 @@ function osTick(force) {
     '#osBody{padding:0 8px 6px}#panel #osCard .osRow{display:flex;align-items:flex-start;gap:8px;width:100%;margin:0;min-height:40px;padding:5px 6px;border:0;border-top:1px solid #d7ece0;border-radius:0;background:transparent;text-align:left;font-size:14px;line-height:1.4;color:#1d2b22}' +
     '#osCard .osRow .ic{font-size:18px;line-height:1.3;width:22px;text-align:center;flex:none}#osCard .osRow .tx{flex:1;min-width:0}#osCard .osRow .sub{margin-left:0}' +
     '#osCard .osLv{display:inline-block;margin:2px 6px 0 0;padding:1px 7px;border-radius:9px;font-size:13px;background:#e9efe9}#osCard .osLv.lv3{background:#cdeed7;color:#14632b;font-weight:bold}#osCard .osLv.lv2{background:#e1f3e6;color:#1e7e34}#osCard .osLv.lv1{background:#f5ecd6;color:#8a6d1f}#osCard .osLv.lv0{background:#eee;color:#888}#osCard .osLv.past{opacity:.45}' +
+    '#osCard .osApp{width:24px;height:24px;border-radius:6px;flex:none;align-self:center;box-shadow:0 1px 2px rgba(0,0,0,.2)}' +
     '#osCard .osHot{color:#c0392b}#osCard .osList{padding:0 0 4px 30px}#osCard .osIt{padding:6px 0;border-top:1px dashed #d7ece0}#osCard .osItT{font-size:14px;line-height:1.45}#osCard .osItT .sub{display:block;margin-left:0}' +
     '#panel #osCard .osAct{display:flex;gap:6px;margin-top:4px}#panel #osCard .osAct button,#panel #osCard .osSm{margin:0;min-height:32px;padding:2px 10px;font-size:13px;border-radius:16px;border:1px solid #2fbf71;background:#fff;color:#1e7e34;flex:none}' +
     '#osCard .osN{margin:4px 0 2px;padding:5px 8px;border-radius:10px;background:#fff6d6;font-size:13px;line-height:1.4}' +

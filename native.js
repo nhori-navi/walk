@@ -117,9 +117,9 @@ function nativeSaveFile(name, data, done) {
 // 同じアドレス（nhori-navi.github.io）なので、置き場も共通。戻るのは、それぞれの「🚶」かスマホの「戻る」
 // keep：閉じても残して裏で動かす（MeguMiru は集め続ける）。TenMiru・YamaMiru は閉じたら止める（カメラ・通信・電池）
 const OV = {
-  megu: {vf: 'js/base.js', vr: /APP_VER *= *(\d+)/, vv: 'APP_VER', vp: '版', path: '../megu/', btn: 'Megu', icon: '🗾', sub: '行った場所を集める', title: 'MeguMiru', color: '#7a5c8e', bg: '#f6f3f8', keep: true},
-  sora: {vf: 'index.html', vr: /SORA_V *= *(\d+)/, vv: 'SORA_V', vp: 'v', path: '../sora/', btn: 'Ten', icon: '✈️', sub: '見上げた空の飛行機・星', title: 'TenMiru', color: '#1f6fd1', bg: '#eef3fb', keep: false},
-  yama: {vf: 'index.html', vr: /YAMA_V *= *(\d+)/, vv: 'YAMA_V', vp: '版', path: '../yama/', btn: 'Yama', icon: '🏔', sub: '見えている山の名前', title: 'YamaMiru', color: '#2e7d32', bg: '#f3f7f1', keep: false}
+  megu: {img: '../megu/icons/icon-192.png', vf: 'js/base.js', vr: /APP_VER *= *(\d+)/, vv: 'APP_VER', vp: '版', path: '../megu/', btn: 'Megu', icon: '🗾', sub: '行った場所を集める', title: 'MeguMiru', color: '#7a5c8e', bg: '#f6f3f8', keep: true},
+  sora: {img: '../sora/icon-192.png', vf: 'index.html', vr: /SORA_V *= *(\d+)/, vv: 'SORA_V', vp: 'v', path: '../sora/', btn: 'Ten', icon: '✈️', sub: '見上げた空の飛行機・星', title: 'TenMiru', color: '#1f6fd1', bg: '#eef3fb', keep: false},
+  yama: {img: '../yama/icon-192.png', vf: 'index.html', vr: /YAMA_V *= *(\d+)/, vv: 'YAMA_V', vp: '版', path: '../yama/', btn: 'Yama', icon: '🏔', sub: '見えている山の名前', title: 'YamaMiru', color: '#2e7d32', bg: '#f3f7f1', keep: false}
 };
 const ovFrames = {};
 let ovCur = '';
@@ -134,11 +134,12 @@ function ovStyle() {
     'body.ov-on #ovStrip{display:flex}#ovStrip .bk{white-space:nowrap}#ovStrip .st{margin-left:auto;font-weight:normal;font-size:13px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}' +
     '#appsBox{display:none;position:absolute;right:62px;z-index:5;width:250px;background:#fff;border-radius:14px;padding:6px;box-shadow:0 2px 12px rgba(0,0,0,.3)}#appsBox.on{display:block}' +
     '#appsBox button{display:flex;align-items:center;gap:10px;width:100%;margin:0;padding:8px 10px;min-height:54px;border:0;border-left:6px solid var(--c);border-radius:10px;background:transparent;text-align:left;color:#1d2b22}' +
-    '#appsBox button+button{margin-top:4px}#appsBox .ic{font-size:26px}#appsBox b{display:block;font-size:16px}#appsBox small{display:block;font-size:12px;color:#5b6b61}' +
+    '#appsBox button+button{margin-top:4px}#appsBox .ic{font-size:26px}#appsBox .ic img{display:block;width:38px;height:38px;border-radius:10px;box-shadow:0 1px 3px rgba(0,0,0,.25)}#appsBox b{display:block;font-size:16px}#appsBox small{display:block;font-size:12px;color:#5b6b61}' +
     'body.dark #appsBox{background:#28322e;box-shadow:0 4px 18px rgba(0,0,0,.6)}body.dark #appsBox button{color:#f1f5f2}body.dark #appsBox small{color:#c9d3cd}' +
     'body.mode-tk #appsBox,body.mode-tabi #appsBox{display:none}' +
     '#appsBox .vr{margin-left:auto;align-self:flex-start;font-size:12px;color:#7a867f;white-space:nowrap;padding-top:3px}#appsBox .nw{display:block;font-size:12px;color:#d35400;font-weight:bold}' +
     '#appsVer{font-size:12px;color:#7a867f;padding:6px 10px 2px;border-top:1px solid #e3e8e5;margin-top:4px}body.dark #appsVer{border-color:#3d4a44;color:#aab6af}body.dark #appsBox .vr{color:#aab6af}body.dark #appsBox .nw{color:#ffb347}' +
+    '#ovStrip .mi{width:20px;height:20px;border-radius:5px;vertical-align:-4px;margin:0 5px 0 2px;box-shadow:0 0 0 1px rgba(255,255,255,.6)}' +
     '#ovStrip .sv{font-size:11px;font-weight:normal;opacity:.75;white-space:nowrap}' +
     '#appsBox .vgo{display:inline-block;margin-left:4px;padding:2px 8px;border-radius:10px;background:#d35400;color:#fff;font-size:12px;font-weight:bold}#appsVer .nw2{color:#d35400;font-weight:bold}body.dark #appsVer .nw2{color:#ffb347}';
   document.head.appendChild(st);
@@ -191,7 +192,7 @@ function stripUpd() {
   let s = $('ovStrip');
   if (!s) {
     s = document.createElement('button'); s.id = 'ovStrip'; s.type = 'button'; s.title = 'MichiMiru に戻る';
-    s.innerHTML = '<span class="bk">◀ MichiMiru に戻る</span><span class="sv"></span><span class="st"></span>';
+    s.innerHTML = '<span class="bk">◀ <img class="mi" src="icon-192.png" alt="" onerror="this.remove()">MichiMiru に戻る</span><span class="sv"></span><span class="st"></span>'; // 版35：アイコン
     s.onclick = () => ovClose(false);
     document.body.appendChild(s);
   }
@@ -272,7 +273,7 @@ function appsSetup() {
   const b = document.createElement('button'); b.id = 'mApps'; b.title = 'ほかのアプリを重ねて開く'; b.textContent = '▦';
   $('mapBtns').appendChild(b);
   const bx = document.createElement('div'); bx.id = 'appsBox';
-  bx.innerHTML = Object.entries(OV).map(([k, o]) => `<button id="ov_${k}" type="button" style="--c:${o.color}"><span class="ic">${o.icon}</span><span><b>${o.title}</b><small>${o.sub}</small><span class="nw" id="nw_${k}" style="display:none"></span></span><span class="vr" id="vr_${k}"></span></button>`).join('') +
+  bx.innerHTML = Object.entries(OV).map(([k, o]) => `<button id="ov_${k}" type="button" style="--c:${o.color}"><span class="ic">${o.img ? `<img src="${o.img}" alt="" onerror="this.parentNode.textContent='${o.icon}'">` : o.icon}</span><span><b>${o.title}</b><small>${o.sub}</small><span class="nw" id="nw_${k}" style="display:none"></span></span><span class="vr" id="vr_${k}"></span></button>`).join('') +
     '<div id="appsVer"></div>';
   $('mapBtns').parentNode.appendChild(bx);
   Object.keys(OV).forEach(k => { $('ov_' + k).onclick = e => { e.stopPropagation(); ovOpen(k); }; });
