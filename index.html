@@ -145,7 +145,7 @@ body.walking.menu #panel{display:block;top:50%;bottom:52px;left:0;right:0;width:
       <div class="row">未踏破を優先：<select id="unexp"><option value="1">なし</option><option value="1.3">弱</option><option value="1.6">強</option><option value="3">最強</option></select></div>
       <div class="row">坂：<select id="slope"><option value="0">気にしない</option><option value="1">避ける（階段も）</option><option value="2">あえて選ぶ</option></select></div>
       <div class="row">遊歩道を優先：<select id="foot"><option value="0">なし</option><option value="1">弱</option><option value="2">強</option></select></div>
-      <div class="row">寄り道：<span class="tg"><label><input type="checkbox" id="poiShrine">⛩神社</label><label><input type="checkbox" id="poiTemple">卍寺</label><label><input type="checkbox" id="poiPark">🌳公園</label></span></div>
+      <div class="row">寄り道：<span class="tg"><label><input type="checkbox" id="poiShrine">⛩神社</label><label><input type="checkbox" id="poiTemple">卍寺</label><label><input type="checkbox" id="poiPark">🌳公園</label><label><input type="checkbox" id="poiMegu">🗾まだの場所</label><label><input type="checkbox" id="poiMesh">🟧あと少しのマス</label></span></div>
       <div class="row">寄る数：<select id="poiN"><option>1</option><option>2</option><option>3</option></select></div>
     </details>
     <div class="small"><span id="loc">現在地を取得中…</span></div>
@@ -239,6 +239,7 @@ body.walking.menu #panel{display:block;top:50%;bottom:52px;left:0;right:0;width:
       <label class="sw"><span class="swt">歩いた道（緑）</span><input type="checkbox" id="walkedChk" checked></label>
       <label class="sw"><span class="swt">乗り物の区間（赤）</span><input type="checkbox" id="vehChk"></label>
       <label class="sw"><span class="swt">神社・寺・公園<small>印をタップすると名前</small></span><input type="checkbox" id="poiShow"></label>
+      <label class="sw"><span class="swt">おまかせに、まだの場所・あと少しのマスを通る案も混ぜる<small>MeguMiru のまだ行っていない場所か、完全制覇まであと少しのマスを1つ通る案を2つまで</small></span><input type="checkbox" id="omMixChk"></label>
       <label class="sw"><span class="swt">ほかの地図の徒歩ルートも点線で出す（比べる用）<small>入にすると、出発地・経由地・目的地の座標を Mapbox 社に送ります</small></span><input type="checkbox" id="cmpChk"></label>
       <label class="sw"><span class="swt">道から外れた記録も薄く<small>GPS のずれなど。距離には入れていません</small></span><input type="checkbox" id="offChk"></label>
       <label class="sw"><span class="swt">道のデータ<small><span class="lg" style="background:#8a9a9a"></span>通れる<span class="lg" style="background:#f39c12"></span>階段<span class="lg" style="background:#9b59b6"></span>つながっていない<span class="lg" style="background:#e74c3c"></span>通行不可</small></span><input type="checkbox" id="netChk"></label>
@@ -287,22 +288,22 @@ window.addEventListener('error', e => {
   if (el) el.textContent = el.textContent ? el.textContent + ' ／ ' + m : m;
 }, true);
 </script>
-<script src="config.js?v=32"></script>
-<script src="base.js?v=32"></script>
-<script src="road.js?v=32"></script>
-<script src="poi.js?v=32"></script>
-<script src="walk.js?v=32"></script>
-<script src="play.js?v=32"></script>
-<script src="tokaido.js?v=32"></script>
-<script src="tabi.js?v=32"></script>
-<script src="app.js?v=32"></script>
-<script src="train.js?v=32"></script>
-<script src="ui.js?v=32"></script>
-<script src="help.js?v=32"></script>
-<script src="native.js?v=32"></script>
-<script src="hikae.js?v=32"></script>
-<script src="matome.js?v=32"></script>
-<script src="nikki.js?v=32"></script>
-<script src="osusume.js?v=32"></script>
+<script src="config.js?v=33"></script>
+<script src="base.js?v=33"></script>
+<script src="road.js?v=33"></script>
+<script src="poi.js?v=33"></script>
+<script src="walk.js?v=33"></script>
+<script src="play.js?v=33"></script>
+<script src="tokaido.js?v=33"></script>
+<script src="tabi.js?v=33"></script>
+<script src="app.js?v=33"></script>
+<script src="train.js?v=33"></script>
+<script src="ui.js?v=33"></script>
+<script src="help.js?v=33"></script>
+<script src="native.js?v=33"></script>
+<script src="hikae.js?v=33"></script>
+<script src="matome.js?v=33"></script>
+<script src="nikki.js?v=33"></script>
+<script src="osusume.js?v=33"></script>
 </body>
 </html>
