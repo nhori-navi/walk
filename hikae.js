@@ -29,7 +29,7 @@ const kvPut = (db, k, v) => new Promise((ok, ng) => { try { const tx = db.transa
 async function hkBuild() {
   if (typeof saveNow === 'function') saveNow();
   const t = Date.now(), apps = {};
-  const w = bkObj(); w.ls = {}; ['walk_help_v1'].forEach(k => { const v = getLS(k); if (v !== null) w.ls[k] = v; });
+  const w = bkObj(); w.ls = {}; ['walk_help_v1', 'walk_days_v1', 'walk_badges_v1', 'walk_wgoal'].forEach(k => { const v = getLS(k); if (v !== null) w.ls[k] = v; }); // 版34：出かけた日・バッジ・週の目標
   apps.walk = w;
   if (typeof sumLoad === 'function') { const ws = await sumLoad(); if (ws.length) w.walks = ws; } // 版25：散歩のまとめ
   const db = await meguDb(false);
@@ -124,7 +124,7 @@ async function hkApply(p, rep) {
   const a = p.o.apps || {}, done = [];
   const fill = ls => Object.entries(ls || {}).forEach(([k, v]) => { try { if (localStorage.getItem(k) === null && typeof v === 'string') localStorage.setItem(k, v); } catch (e) {} });
   if (p.walk) {
-    const n = applyBackup(p.walk); saveTracks(); afterTracksChanged(); fill(a.walk.ls);
+    const n = applyBackup(p.walk); saveTracks(); afterTracksChanged(); if (typeof tzMergeLs === 'function') tzMergeLs(a.walk.ls); fill(a.walk.ls);
     if (Array.isArray(a.walk.walks) && typeof sumLoad === 'function') { // 版25：散歩のまとめ（始めた時刻で1つ）
       try { const have = await sumLoad(), ks = new Set(have.map(x => x.t0)); a.walk.walks.forEach(x => { if (x && x.t0 && !ks.has(x.t0)) have.push(x); }); have.sort((x, y) => x.t0 - y.t0); await trkDo('readwrite', st => st.put(have, 'walks')); } catch (e) {}
     }
