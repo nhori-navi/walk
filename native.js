@@ -577,3 +577,38 @@ if (IN_APP) {
   setInterval(skyCheck, 30000); // 止まっている間（位置が届かない間）も見張る
   document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') appCard(); });
 }
+
+// ---------- 版37：画面の明るさを、重ねたアプリ（MeguMiru 版20・TenMiru v43・YamaMiru 版15）にも合わせる ----------
+// 重ねたアプリは、描き始める前に parent.miruTheme() を読み、そのあとは MichiMiru から miruThemeSet(t) で知らせを受ける
+// t = {dark: 暗い画面か, preset: 地図の明るさ（day／dawn／dusk／night。MichiMiru の「夜の地図」に従う）}
+window.miruTheme = function () {
+  const dark = document.body.classList.contains('dark');
+  let preset = 'day';
+  if (dark) { try { preset = themeState().preset; } catch (e) { preset = 'dusk'; } }
+  return {dark, preset};
+};
+const OV_DARKBG = '#1e2522';
+let ovThemeKey = '';
+function ovThemePush(force) {
+  const t = window.miruTheme(), k = t.dark + ':' + t.preset;
+  if (!force && k === ovThemeKey) return;
+  ovThemeKey = k;
+  Object.entries(ovFrames).forEach(([id, f]) => {
+    try { f.style.background = t.dark ? OV_DARKBG : OV[id].bg; } catch (e) {}
+    try { const w = f.contentWindow; if (w && typeof w.miruThemeSet === 'function') w.miruThemeSet(t); } catch (e) {}
+  });
+}
+(function () {
+  // 開いたとき（iframe を作った直後から暗い地の色にして、白く光らないように）
+  const open0 = ovOpen;
+  ovOpen = function (id) {
+    open0.apply(this, arguments);
+    const f = ovFrames[id];
+    if (f && !f.__thm) { f.__thm = 1; f.addEventListener('load', () => ovThemePush(true)); }
+    ovThemePush(true);
+  };
+  // MichiMiru の明るさが変わったら（自動で夜になった・設定を変えた）すぐ知らせる
+  try { new MutationObserver(() => ovThemePush(false)).observe(document.body, {attributes: true, attributeFilter: ['class']}); } catch (e) {}
+  ['themeSel', 'nightSel'].forEach(id => { const s = $(id); if (s) s.addEventListener('change', () => setTimeout(() => ovThemePush(true), 50)); });
+  setInterval(() => ovThemePush(false), 5000); // 夕方→夜のように地図の明るさだけ変わるとき
+})();
