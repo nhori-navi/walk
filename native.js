@@ -612,3 +612,80 @@ function ovThemePush(force) {
   ['themeSel', 'nightSel'].forEach(id => { const s = $(id); if (s) s.addEventListener('change', () => setTimeout(() => ovThemePush(true), 50)); });
   setInterval(() => ovThemePush(false), 5000); // 夕方→夜のように地図の明るさだけ変わるとき
 })();
+
+// ---------- 版38：電波のない所で重ねて開いたとき（真っ白にしない） ----------
+// ・電波がない（navigator.onLine が false）か、開いて15秒たっても中身が動き出さないときは、案内のカード（#ovNet）を重ねる
+// ・中身が動き出したら（そのアプリの版の変数が読めたら）カードを消す。電波が戻ったら自動でもう一度読み込む
+// ・MeguMiru のように前に開いた画面が残っていれば、電波がなくてもそのまま見られる（カードは出さない）
+const OVN = {id: '', at: 0, tick: 0, shown: ''};
+function ovReady(id) {
+  const f = ovFrames[id], o = OV[id]; if (!f || !o) return false;
+  try { const w = f.contentWindow; return !!(w && w.eval('typeof ' + o.vv + ' !== "undefined"')); } catch (e) { return false; }
+}
+function ovNetCard(kind) {
+  let c = $('ovNet');
+  if (!c) {
+    c = document.createElement('div'); c.id = 'ovNet';
+    const st = document.createElement('style');
+    st.textContent = '#ovNet{position:fixed;left:0;right:0;top:var(--ovs);bottom:0;z-index:9000;display:none;align-items:center;justify-content:center;background:#f2f5f3;padding:20px}' +
+      '#ovNet.on{display:flex}#ovNet .bx{max-width:340px;width:100%;background:#fff;border:2px solid #2fbf71;border-radius:16px;padding:20px 18px;text-align:center;box-shadow:0 2px 10px rgba(0,0,0,.12);color:#1d2b22}' +
+      '#ovNet .ic{font-size:44px;line-height:1.1}#ovNet h3{margin:8px 0 6px;font-size:18px;color:#1e7e34}#ovNet p{margin:6px 0;font-size:14px;line-height:1.6}#ovNet .rec{color:#1e7e34;font-weight:bold}' +
+      '#ovNet .ac{display:flex;gap:8px;justify-content:center;margin-top:14px}#ovNet button{margin:0;min-height:44px;padding:8px 16px;border-radius:12px;font-size:15px;border:1px solid #2fbf71;background:#fff;color:#1e7e34}' +
+      '#ovNet button.pr{background:#1e7e34;border-color:#1e7e34;color:#fff;font-weight:bold}#ovNet .sm{font-size:12px;color:#6b7a70;margin-top:10px}' +
+      'body.dark #ovNet{background:#1e2522}body.dark #ovNet .bx{background:#28322e;border-color:#3aa85a;color:#f1f5f2}body.dark #ovNet h3,body.dark #ovNet .rec{color:#a8e0b4}' +
+      'body.dark #ovNet button{background:#22302a;color:#a8e0b4;border-color:#3aa85a}body.dark #ovNet button.pr{background:#1e7e34;color:#fff}body.dark #ovNet .sm{color:#b9c5bd}';
+    document.head.appendChild(st);
+    c.addEventListener('click', e => {
+      const b = e.target.closest('button'); if (!b) return;
+      if (b.dataset.k === 'retry') ovNetRetry(); else ovClose(false);
+    });
+  }
+  document.body.appendChild(c); // 重ねたアプリの iframe より上に（あとに置いた方が上）
+  const o = OV[OVN.id] || {}, off = kind === 'off';
+  const recLine = walk ? '<p class="rec">MichiMiru の記録はこのまま続いています。</p>' : '<p>MichiMiru はこのまま使えます。</p>';
+  c.innerHTML = `<div class="bx"><div class="ic">${off ? '📵' : '⚠️'}</div><h3>${off ? '電波が届いていません' : '読み込めませんでした'}</h3>` +
+    `<p>${esc(o.title || '')} を開くには通信が必要です。${off ? '' : '電波が弱いか、途中で切れたようです。'}</p>${recLine}` +
+    `<div class="ac"><button class="pr" data-k="retry">もう一度</button><button data-k="back">MichiMiru に戻る</button></div>` +
+    `<div class="sm">${off ? '電波が戻ったら、自動でもう一度読み込みます' : 'もう一度押しても開かないときは、電波のよい所で試してください'}</div></div>`;
+  c.classList.add('on'); OVN.shown = kind;
+}
+function ovNetHide() { const c = $('ovNet'); if (c) c.classList.remove('on'); OVN.shown = ''; }
+function ovNetRetry() {
+  const id = OVN.id, f = ovFrames[id]; if (!id || !f) return;
+  ovNetHide();
+  if (navigator.onLine === false) { ovNetCard('off'); return; }
+  const u = new URL(OV[id].path, location.href).href + '?inapp=1&r=' + Date.now();
+  try { f.src = u; } catch (e) {}
+  OVN.at = Date.now();
+}
+function ovNetCheck() {
+  const id = OVN.id;
+  if (!id || ovCur !== id) { ovNetHide(); return; }
+  if (ovReady(id)) { ovNetHide(); return; }
+  if (navigator.onLine === false) { if (OVN.shown !== 'off') ovNetCard('off'); return; }
+  if (Date.now() - OVN.at > 15000) { if (OVN.shown !== 'fail') ovNetCard('fail'); }
+  else if (OVN.shown === 'off') ovNetHide();
+}
+(function () {
+  const open1 = ovOpen;
+  ovOpen = function (id) {
+    const was = ovReady(id);
+    open1.apply(this, arguments);
+    if (ovCur !== id) return;
+    OVN.id = id; OVN.at = Date.now();
+    if (!was && navigator.onLine === false) ovNetCard('off'); else ovNetHide();
+    clearInterval(OVN.tick); OVN.tick = setInterval(ovNetCheck, 1000);
+  };
+  const close1 = ovClose;
+  ovClose = function () { const r = close1.apply(this, arguments); if (!ovCur) { OVN.id = ''; clearInterval(OVN.tick); ovNetHide(); } return r; };
+  window.miruClose = () => ovClose(false); window.meguClose = window.miruClose;
+  // 戻る帯：電波がない間は右に「📵 電波なし」
+  const strip1 = stripUpd;
+  stripUpd = function () {
+    strip1.apply(this, arguments);
+    const s = $('ovStrip'), st = s && s.querySelector('.st');
+    if (st && navigator.onLine === false) st.textContent = '📵 電波なし・' + st.textContent;
+  };
+  window.addEventListener('offline', () => { if (ovCur) { stripUpd(); ovNetCheck(); } });
+  window.addEventListener('online', () => { if (ovCur) { stripUpd(); if (OVN.shown === 'off') ovNetRetry(); } });
+})();
