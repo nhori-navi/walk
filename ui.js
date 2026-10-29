@@ -269,7 +269,7 @@ body.dark .me .dot{left:5px;top:5px;width:24px;height:24px;border-width:3px;box-
   document.head.appendChild(st);
 
   // ---------- 下のタブ ----------
-  const TABS = [['route', '🧭', 'ルート'], ['play', '🟧', 'あそぶ'], ['walk'], ['rec', '🗾', '記録'], ['set', '⚙️', '設定']];
+  const TABS = [['route', '🧭', 'ルート'], ['play', '🟧', 'あそぶ'], ['walk'], ['rec', '📅', '記録'], ['set', '⚙️', '設定']];
   const bar = document.createElement('nav'); bar.id = 'tabbar';
   bar.innerHTML = TABS.map(([k, ic, nm]) => k === 'walk'
     ? '<button id="walkFab" class="fab"><span class="ic">🚶</span><span id="walkFabTx">記録開始</span></button>'
