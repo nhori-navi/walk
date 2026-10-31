@@ -1,5 +1,7 @@
 // mirutoko.js：版40 ミルトコ（Google Play に出す予定のシリーズアプリ）のホームを、MichiMiru の上にかぶせる（home.js のあと、seiri.js の前）
-// ・ホームの中身は別のリポジトリ toko（https://nhori-navi.github.io/toko/）。ここではそれを iframe でいちばん上に置き、隠したり出したりする
+// ・版42：ホーム＝HP の TOP（https://nhori-navi.github.io/?inapp=1。アプリの中では毎日使う形に切り替わる＝toko/kyou.js）。
+//   ミルビーは特別ページ（toko＝https://nhori-navi.github.io/toko/）で、TOP から「重ねて開く」（OV.toko）
+// ・ここではホーム（TOP）を iframe でいちばん上に置き、隠したり出したりする
 //   （MichiMiru のページを切り替えると、画面を消しての記録の受け取りが途切れるため。版21 と同じ考え方）
 // ・ホームを出すのは「ミルトコとして動いているとき」（アプリの目印 MiruTokoApp）か、設定の「ミルトコのホームを試す」が入のときだけ
 //   → それ以外は版39 と同じ動き
@@ -13,7 +15,10 @@ const TOKO_APP = /MiruTokoApp/.test(navigator.userAgent);
 const TOKO = {f: null, ready: false, shown: false, failed: false, th: '', mkAt: 0};
 const tokoActive = () => TOKO_APP || getLS('walk_toko') === '1';
 const tokoWin = () => { try { return TOKO.ready && TOKO.f && TOKO.f.contentWindow; } catch (e) { return null; } };
-const TOKO_BG = {light: '#f4f1e8', dark: '#18201f'};
+const TOKO_BG = {light: '#79b0e2', dark: '#1c1f1e'};   // TOP のはじめの絵の空の色・暗い画面の地の色
+const TOKO_URL = () => new URL('../', location.href).href + '?inapp=1';   // ホーム＝HP の TOP
+// 版42：ミルビーのページ（toko）を「重ねて開く」の仲間に（▦ の枠には出さない。枠は先に作ってあるため）
+if (typeof OV !== 'undefined' && !OV.toko) OV.toko = {img: '../toko/img/icon.svg', vf: 'lib.js', vr: /TOKO_V *= *(\d+)/, vv: 'TOKO_V', vp: '版', path: '../toko/', btn: 'Toko', icon: '🐦', sub: 'ミルビーのみちくさ', title: 'ミルビー', color: '#2f4c53', bg: '#f4f1e8', keep: false};
 
 function tokoStyle() {
   if ($('tokoStyle')) return;
@@ -36,7 +41,7 @@ function tokoStart() {
   if (!f) {
     f = document.createElement('iframe');
     f.id = 'tokoFrame'; f.title = 'ミルトコのホーム';
-    f.src = new URL('../toko/', location.href).href + '?inapp=1';
+    f.src = TOKO_URL();
     document.body.appendChild(f);
   }
   f.style.background = document.body.classList.contains('dark') ? TOKO_BG.dark : TOKO_BG.light;
@@ -110,7 +115,8 @@ window.tokoGo = function (id, sub) {
     if (sub === 'nikki' && typeof showTab === 'function') { showTab('rec'); setTimeout(() => { const h = $('todayHead'); if (h) h.scrollIntoView({block: 'start'}); }, 80); }
     return;
   }
-  if (typeof OV !== 'undefined' && OV[id]) { ovOpen(id); lsSet('walk_toko_last', id); }
+  if (id === 'bee') id = 'toko';   // ミルビーのページ
+  if (typeof OV !== 'undefined' && OV[id]) { ovOpen(id); if (id !== 'toko') lsSet('walk_toko_last', id); }
 };
 window.tokoState = function () {
   const w = typeof walk !== 'undefined' ? walk : null;
@@ -125,6 +131,18 @@ window.tokoOff = function () {
   tokoStop();
   if (typeof status === 'function') status('ミルトコのホームを試すのをやめました（設定タブの「🏠 ミルトコのホーム（ためし）」で、また試せます）');
 };
+
+// ---------- 重ねたアプリを閉じて TOP に戻ったとき：TOP を描き直す（ミルビーのページで達成したときなど） ----------
+(function () {
+  const close0 = ovClose;
+  ovClose = function () {
+    const was = typeof ovCur !== 'undefined' ? ovCur : '';
+    const r = close0.apply(this, arguments);
+    if (was && !ovCur && TOKO.shown && TOKO.ready) { try { TOKO.f.contentWindow.tokoShow(); } catch (e) {} }
+    return r;
+  };
+  window.miruClose = () => ovClose(false); window.meguClose = window.miruClose;
+})();
 
 // ---------- 戻る帯：文字と押したとき ----------
 // ホームに戻る＝ホームの上に重ねたアプリを開いているとき・MichiMiru の画面（ホームが下がっている）のとき
