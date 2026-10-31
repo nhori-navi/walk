@@ -79,6 +79,20 @@ body.walking.menu #panel{display:block;top:50%;bottom:52px;left:0;right:0;width:
 </style>
 </head>
 <body>
+<script>
+// 版41：ミルトコのホーム（toko）を、MichiMiru の画面より先に出す（開いたらすぐホーム。地図の準備はホームの裏で進む）。あとは mirutoko.js が引き継ぐ
+(function () {
+  try {
+    if (!/MiruTokoApp/.test(navigator.userAgent) && localStorage.getItem('walk_toko') !== '1') return;
+    var m = localStorage.getItem('walk_theme') || 'auto';
+    var dark = m === 'dark' || (m !== 'light' && window.matchMedia && matchMedia('(prefers-color-scheme: dark)').matches);
+    var f = document.createElement('iframe');
+    f.id = 'tokoFrame'; f.title = 'ミルトコのホーム'; f.className = 'on'; f.src = '../toko/?inapp=1';
+    f.style.cssText = 'position:fixed;left:0;top:0;width:100%;height:100%;border:0;z-index:8995;background:' + (dark ? '#18201f' : '#f4f1e8');
+    document.body.appendChild(f);
+  } catch (e) {}
+})();
+</script>
 <div id="map"></div>
 <div id="hud"></div>
 <div id="mbar"><div id="mbRow"><span id="mbLine"></span><button id="mbInfo" title="詳しく">ⓘ</button><button id="mbClose" title="閉じる">✕</button></div><div id="mbMore"></div></div>
@@ -288,26 +302,26 @@ window.addEventListener('error', e => {
   if (el) el.textContent = el.textContent ? el.textContent + ' ／ ' + m : m;
 }, true);
 </script>
-<script src="config.js?v=40"></script>
-<script src="base.js?v=40"></script>
-<script src="road.js?v=40"></script>
-<script src="poi.js?v=40"></script>
-<script src="walk.js?v=40"></script>
-<script src="play.js?v=40"></script>
-<script src="tokaido.js?v=40"></script>
-<script src="tabi.js?v=40"></script>
-<script src="app.js?v=40"></script>
-<script src="train.js?v=40"></script>
-<script src="ui.js?v=40"></script>
-<script src="help.js?v=40"></script>
-<script src="native.js?v=40"></script>
-<script src="hikae.js?v=40"></script>
-<script src="matome.js?v=40"></script>
-<script src="nikki.js?v=40"></script>
-<script src="osusume.js?v=40"></script>
-<script src="tsuzuku.js?v=40"></script>
-<script src="home.js?v=40"></script>
-<script src="mirutoko.js?v=40"></script>
-<script src="seiri.js?v=40"></script>
+<script src="config.js?v=41"></script>
+<script src="base.js?v=41"></script>
+<script src="road.js?v=41"></script>
+<script src="poi.js?v=41"></script>
+<script src="walk.js?v=41"></script>
+<script src="play.js?v=41"></script>
+<script src="tokaido.js?v=41"></script>
+<script src="tabi.js?v=41"></script>
+<script src="app.js?v=41"></script>
+<script src="train.js?v=41"></script>
+<script src="ui.js?v=41"></script>
+<script src="help.js?v=41"></script>
+<script src="native.js?v=41"></script>
+<script src="hikae.js?v=41"></script>
+<script src="matome.js?v=41"></script>
+<script src="nikki.js?v=41"></script>
+<script src="osusume.js?v=41"></script>
+<script src="tsuzuku.js?v=41"></script>
+<script src="home.js?v=41"></script>
+<script src="mirutoko.js?v=41"></script>
+<script src="seiri.js?v=41"></script>
 </body>
 </html>
