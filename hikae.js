@@ -29,7 +29,7 @@ const kvPut = (db, k, v) => new Promise((ok, ng) => { try { const tx = db.transa
 async function hkBuild() {
   if (typeof saveNow === 'function') saveNow();
   const t = Date.now(), apps = {};
-  const w = bkObj(); w.ls = {}; ['walk_help_v1', 'walk_days_v1', 'walk_badges_v1', 'walk_wgoal'].forEach(k => { const v = getLS(k); if (v !== null) w.ls[k] = v; }); // 版34：出かけた日・バッジ・週の目標
+  const w = bkObj(); w.ls = {}; ['walk_help_v1', 'walk_days_v1', 'walk_badges_v1', 'walk_wgoal', 'walk_home', 'walk_hist'].forEach(k => { const v = getLS(k); if (v !== null) w.ls[k] = v; }); // 版34：出かけた日・バッジ・週の目標（版39：家・最近の行き先）
   apps.walk = w;
   if (typeof sumLoad === 'function') { const ws = await sumLoad(); if (ws.length) w.walks = ws; } // 版25：散歩のまとめ
   const db = await meguDb(false);

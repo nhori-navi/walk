@@ -15,7 +15,7 @@
     walkSetHead: '振動・道を外れたとき・体重',
     setHead: '道のデータを取り直す',
     recHead: '書き出し・読み込み・保存の状況・すべて消す',
-    favHead: '登録した場所の名前の変更・削除'
+    favHead: '登録した場所の削除・🏠 家にする'
   };
   // div.card（中に .ch の見出し）→ details.card（見出しは summary）。中身はそのまま移す
   function fold(card, key) {
