@@ -4,11 +4,13 @@
 // ・ホームを出すのは「ミルトコとして動いているとき」（アプリの目印 MiruTokoApp）か、設定の「ミルトコのホームを試す」が入のときだけ
 //   → それ以外は版39 と同じ動き
 // ・ホームのボタン：歩く＝ホームが下がって MichiMiru、めぐる・空・山＝今の「重ねて開く」（ovOpen）。重ねたアプリはホームの上に開く
-// ・戻り方：戻る帯「◀ ホームに戻る」、地図の右の ▦（ミルトコのときはホームへ）、スマホの「戻る」（ミル→ホーム、ホーム→アプリを裏に回す）
+// ・戻り方：戻る帯「◀ ホームに戻る」、スマホの「戻る」（ミル→ホーム、ホーム→アプリを裏に回す）
+//   版41：MichiMiru の画面の上にも同じ緑の帯（body.toko-walk）。▦ はミルトコのときは出さない（ホームに4つのボタンがあるので）
+//   版41：index.html の頭の小さな script が、MichiMiru の画面より先に iframe を作る（開いたらすぐホーム）。ここではそれを引き継ぐ
 // ・散歩を終えたら（まとめを保存したあと）、ホームに「判定して」と頼み、達成ならまとめのカードに1行
-// ・ホームのみちくさの材料（walk_mk_v1）：近くの神社・寺・公園の数、MeguMiru のまだの場所の数といちばん近い所
+// ・ホームのみちくさの材料（walk_mk_v1）：近くの神社・寺・公園の数、MeguMiru のまだの場所の数といちばん近い所、山の見え方（版41）
 const TOKO_APP = /MiruTokoApp/.test(navigator.userAgent);
-const TOKO = {f: null, ready: false, shown: false, failed: false, apps0: null, th: '', mkAt: 0, tick: 0};
+const TOKO = {f: null, ready: false, shown: false, failed: false, th: '', mkAt: 0};
 const tokoActive = () => TOKO_APP || getLS('walk_toko') === '1';
 const tokoWin = () => { try { return TOKO.ready && TOKO.f && TOKO.f.contentWindow; } catch (e) { return null; } };
 const TOKO_BG = {light: '#f4f1e8', dark: '#18201f'};
@@ -17,6 +19,9 @@ function tokoStyle() {
   if ($('tokoStyle')) return;
   const st = document.createElement('style'); st.id = 'tokoStyle';
   st.textContent = '#tokoFrame{position:fixed;left:0;top:0;width:100%;height:100%;border:0;z-index:8995;display:none;background:#f4f1e8}#tokoFrame.on{display:block}' +
+    // 版41：MichiMiru の画面の上の緑の帯（ほかのミルと同じ）。地図と全画面の画面は帯の下から
+    'body.toko-walk #ovStrip{display:flex}body.toko-walk #map{top:var(--ovs);height:calc(var(--split,50%) - var(--ovs))}body.toko-walk.walking #map{height:auto}body.toko-walk.walking.menu #map{height:calc(var(--split,50%) - var(--ovs))}' +
+    '@media (min-width:900px){body.toko-walk #map{height:auto}}body.toko-walk #helpBox,body.toko-walk #intro{top:var(--ovs)}body.toko-walk #hud{top:calc(var(--ovs) + 8px)}body.toko-on #mApps{display:none}' +
     '#sumCard .sumMkz{margin-top:4px;padding:5px 8px;border-radius:10px;background:#e7f2e4;font-size:14px;font-weight:bold;color:#2e6b3a}#sumCard .sumMkz small{display:block;font-weight:normal;font-size:12px;color:#4d6b52}' +
     'body.dark #sumCard .sumMkz{background:#24382a;color:#a8e0b4}body.dark #sumCard .sumMkz small{color:#b9d3bf}';
   document.head.appendChild(st);
@@ -25,19 +30,26 @@ function tokoStyle() {
 function tokoStart() {
   if (TOKO.f) return;
   tokoStyle();
-  const f = document.createElement('iframe');
-  f.id = 'tokoFrame'; f.title = 'ミルトコのホーム';
-  f.src = new URL('../toko/', location.href).href + '?inapp=1';
+  if (typeof ovStyle === 'function') ovStyle();   // 戻る帯の見た目（Chrome では重ねて開くまで作られないため）
+  let f = $('tokoFrame');
+  const early = !!f;   // 版41：index.html の頭で先に作ってある
+  if (!f) {
+    f = document.createElement('iframe');
+    f.id = 'tokoFrame'; f.title = 'ミルトコのホーム';
+    f.src = new URL('../toko/', location.href).href + '?inapp=1';
+    document.body.appendChild(f);
+  }
   f.style.background = document.body.classList.contains('dark') ? TOKO_BG.dark : TOKO_BG.light;
   TOKO.f = f; TOKO.ready = false; TOKO.failed = false;
   f.addEventListener('load', tokoLoaded);
-  document.body.appendChild(f);
+  document.body.classList.add('toko-on');
   tokoShowHome(true);
+  if (early) { let ok = false; try { ok = typeof f.contentWindow.TOKO_V !== 'undefined'; } catch (e) {} if (ok) tokoLoaded(); }
   // 読み込めない（電波なしなど）ときは、ホームを出さずにいつもの MichiMiru のまま
   setTimeout(() => { if (TOKO.f === f && !TOKO.ready) tokoFail(); }, 15000);
-  tokoAppsBtn();
 }
 function tokoLoaded() {
+  if (TOKO.ready) return;
   let ok = false;
   try { ok = typeof TOKO.f.contentWindow.TOKO_V !== 'undefined'; } catch (e) {}
   if (!ok) { tokoFail(); return; }
@@ -45,26 +57,24 @@ function tokoLoaded() {
   tokoTheme(true);
   if (TOKO.shown) { try { TOKO.f.contentWindow.tokoShow(); } catch (e) {} }
 }
+// 読み込めなかった：いつもの MichiMiru に戻す（次に開いたときにもう一度読み込む）
 function tokoFail() {
   if (!TOKO.f) return;
-  TOKO.failed = true;
-  if (TOKO.shown) { TOKO.f.classList.remove('on'); TOKO.shown = false; }
-  if (typeof status === 'function') status('ミルトコのホームを読み込めませんでした（電波のよい所で ▦ を押すと、もう一度読み込みます）');
+  tokoStop();
+  if (typeof status === 'function') status('ミルトコのホームを読み込めませんでした（電波のよい所で開き直すと、もう一度読み込みます）');
 }
 function tokoStop() {
   if (!TOKO.f) return;
   try { TOKO.f.remove(); } catch (e) {}
   TOKO.f = null; TOKO.ready = false; TOKO.shown = false;
-  const b = $('mApps');
-  if (b && TOKO.apps0) { b.onclick = TOKO.apps0; b.title = 'ほかのアプリを重ねて開く'; }
-  if (b && b.dataset.toko === 'own') b.remove();
-  TOKO.apps0 = null;
+  document.body.classList.remove('toko-on', 'toko-walk');
+  try { map.resize(); } catch (e) {}
   if (typeof ovCur !== 'undefined' && ovCur) stripUpd();
 }
 function tokoShowHome(first) {
   if (!TOKO.f) return;
-  if (TOKO.failed) { tokoRetry(); return; }
   TOKO.f.classList.add('on'); TOKO.shown = true;
+  document.body.classList.remove('toko-walk');
   lsSet('walk_toko_last', 'home');
   if (typeof appsClose === 'function') appsClose();
   if (!first && TOKO.ready) { try { TOKO.f.contentWindow.tokoShow(); } catch (e) {} }
@@ -73,29 +83,16 @@ function tokoShowHome(first) {
 function tokoHideHome() {
   if (!TOKO.f) return;
   TOKO.f.classList.remove('on'); TOKO.shown = false;
+  document.body.classList.add('toko-walk');
+  stripUpd();
   try { map.resize(); } catch (e) {}
-}
-function tokoRetry() {
-  const f = TOKO.f; if (!f) return;
-  TOKO.failed = false; TOKO.ready = false;
-  try { f.contentWindow.location.replace(new URL('../toko/', location.href).href + '?inapp=1&r=' + Date.now()); } catch (e) {}
-  f.classList.add('on'); TOKO.shown = true;
-  setTimeout(() => { if (TOKO.f === f && !TOKO.ready) tokoFail(); }, 15000);
+  setTimeout(() => { try { map.resize(); } catch (e) {} }, 100);
 }
 // MichiMiru の地図（ホームが下がっている）からホームに戻る
 function tokoBackHome() {
-  if (typeof ovCur !== 'undefined' && ovCur) { ovClose(false); }
+  if (typeof ovCur !== 'undefined' && ovCur) { ovClose(false); return; }
   if (history.state && history.state.mmToko) { try { history.back(); return; } catch (e) {} }
   tokoShowHome();
-}
-// 地図の右の ▦：ミルトコのときはホームへ（ホームに4つのボタンがあるので、枠は出さない）。Chrome には ▦ がないので足す
-function tokoAppsBtn() {
-  let b = $('mApps');
-  if (!b && $('mapBtns')) { b = document.createElement('button'); b.id = 'mApps'; b.textContent = '▦'; b.dataset.toko = 'own'; $('mapBtns').appendChild(b); }
-  if (!b) return;
-  if (!TOKO.apps0 && b.dataset.toko !== 'own') TOKO.apps0 = b.onclick;
-  b.title = 'ミルトコのホームへ';
-  b.onclick = e => { e.stopPropagation(); tokoBackHome(); };
 }
 window.addEventListener('popstate', () => {
   if (!TOKO.f) return;
@@ -129,20 +126,24 @@ window.tokoOff = function () {
   if (typeof status === 'function') status('ミルトコのホームを試すのをやめました（設定タブの「🏠 ミルトコのホーム（ためし）」で、また試せます）');
 };
 
-// ---------- 戻る帯の文字 ----------
+// ---------- 戻る帯：文字と押したとき ----------
+// ホームに戻る＝ホームの上に重ねたアプリを開いているとき・MichiMiru の画面（ホームが下がっている）のとき
 (function () {
   const strip0 = stripUpd;
   stripUpd = function () {
     strip0.apply(this, arguments);
-    const bk = document.querySelector('#ovStrip .bk'); if (!bk) return;
-    const home = !!(TOKO.f && TOKO.shown);
+    const s = $('ovStrip'), bk = s && s.querySelector('.bk'); if (!bk) return;
+    const cur = typeof ovCur !== 'undefined' ? ovCur : '';
+    const home = !!(TOKO.f && (TOKO.shown || !cur));
     const want = home ? 'ホームに戻る' : 'MichiMiru に戻る';
     if (bk.dataset.t !== want) {
       bk.dataset.t = want;
       bk.innerHTML = `◀ <img class="mi" src="${home ? '../toko/img/icon.svg' : 'icon-192.png'}" alt="" onerror="this.remove()">${want}`;
-      const s = $('ovStrip'); if (s) s.title = want;
+      s.title = want;
     }
+    if (!s.__toko) { s.__toko = 1; s.onclick = () => { if (typeof ovCur !== 'undefined' && ovCur) ovClose(false); else if (TOKO.f) tokoBackHome(); }; }
   };
+  setInterval(() => { if (document.body.classList.contains('toko-walk') && !(typeof ovCur !== 'undefined' && ovCur)) stripUpd(); }, 5000);
 })();
 
 // ---------- 明るさ ----------
@@ -182,7 +183,7 @@ async function tokoMkSave() {
   if (!here) return;
   TOKO.mkAt = Date.now();
   const old = getLSjson('walk_mk_v1') || {}, same = old.p && distM(old.p, here) < 500;
-  const out = {t: Date.now(), p: [Math.round(here[0] * 1e4) / 1e4, Math.round(here[1] * 1e4) / 1e4], poi: same ? old.poi || null : null, megu: same ? old.megu || null : null};
+  const out = {t: Date.now(), p: [Math.round(here[0] * 1e4) / 1e4, Math.round(here[1] * 1e4) / 1e4], poi: same ? old.poi || null : null, megu: same ? old.megu || null : null, yama: same ? old.yama || null : null};
   // 神社・寺・公園：読み込んでいる道のデータが今の場所を含むときだけ数える
   try {
     const g = typeof graph !== 'undefined' ? graph : null, m = 0.01;
@@ -200,6 +201,19 @@ async function tokoMkSave() {
       out.megu = {walk: one(1500), far: one(5000)};
     }
   } catch (e) {}
+  // 版41：山の見え方（今日のおすすめと同じ計算。天気は今日のおすすめが取ったもの）。{k:日付, nm, dd（0 今日・1 明日）, s（朝・昼・夕）, m（◎○△×）}
+  try {
+    if (typeof osTargets === 'function' && typeof osLevels === 'function') {
+      const tg = osTargets(here);
+      if (tg) {
+        const hr = new Date().getHours(), dd = hr >= 18 ? 1 : 0, cs = hr < 10 ? 0 : hr < 15 ? 1 : 2;
+        const lv = osLevels(tg, osWxStore(), dd);
+        let bi = -1; lv.forEach((v, i) => { if (v != null && (dd || i >= cs) && (bi < 0 || v > lv[bi])) bi = i; });
+        const k = ymd(Date.now() - 4 * 3600000);
+        if (bi >= 0) out.yama = {k, nm: tg.peaks[0].name, dd, s: OS_SLOTS[bi][0], m: OS_MARK[lv[bi]]};
+      }
+    }
+  } catch (e) {}
   lsSet('walk_mk_v1', JSON.stringify(out));
 }
 function getLSjson(k) { try { return JSON.parse(getLS(k) || 'null'); } catch (e) { return null; } }
@@ -211,7 +225,7 @@ function tokoCard() {
   const set = $('tab-set'); if (!set) return;
   const c = document.createElement('div'); c.className = 'card';
   c.innerHTML = '<div class="ch" id="mtkHead">🏠 ミルトコのホーム（ためし）</div>' +
-    '<label class="sw"><span class="swt">ミルトコのホームを試す<small>Google Play に出す予定のミルトコのホーム画面（きょうのみちくさ・ミルビー・4つのミルのボタン）が、MichiMiru の上にかぶさります。地図の右の ▦ でホームに戻れます。切るといつもの MichiMiru</small></span><input type="checkbox" id="mtkChk"></label>';
+    '<label class="sw"><span class="swt">ミルトコのホームを試す<small>Google Play に出す予定のミルトコのホーム画面（きょうのみちくさ・ミルビー・4つのミルのボタン）が、MichiMiru の上にかぶさります。画面の上の緑の帯でホームに戻れます。切るといつもの MichiMiru</small></span><input type="checkbox" id="mtkChk"></label>';
   if (after) after.after(c); else set.appendChild(c);
   $('mtkChk').checked = tokoActive();
   $('mtkChk').onchange = e => {

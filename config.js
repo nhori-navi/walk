@@ -23,4 +23,4 @@ const NET_COLOR = {ok:'#8a9a9a', steps:'#f39c12', iso:'#9b59b6', ng:'#e74c3c'};
 const FOOT_F = [[1, 1, 1], [1, 1.1, 1.3], [1, 1.25, 1.6]];
 const POI = {shrine: {ic: '⛩', nm: '神社', col: '#c0392b'}, temple: {ic: '卍', nm: '寺', col: '#8e44ad'}, park: {ic: '🌳', nm: '公園', col: '#27ae60'},
   megu: {ic: '🗾', nm: 'まだの場所', col: '#7a5c8e'}, mesh: {ic: '🟧', nm: 'あと少しのマス', col: '#e67e22'}}; // 版33：MeguMiru のまだの場所・あと少しのマスも寄り道に
-const APP_VER = 40; // index.html の ?v= と同じ番号にする
+const APP_VER = 41; // index.html の ?v= と同じ番号にする
