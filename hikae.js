@@ -1,4 +1,4 @@
-// hikae.js：版24（版25：散歩のまとめも入れる）4つのアプリ（MichiMiru・MeguMiru・TenMiru・YamaMiru）の控えを1つのファイルで（native.js のあとに読み込む）
+// hikae.js：版24（版25：散歩のまとめも入れる。版40：ミルトコのみちくさ・ミルビー〔toko_〕も入れる）4つのアプリ（MichiMiru・MeguMiru・TenMiru・YamaMiru）の控えを1つのファイルで（native.js のあとに読み込む）
 // ・書き出し：4つの記録を miru-hikae-日付.json に。中身はそれぞれのアプリの書き出しと同じ形＋紹介を見た印など
 // ・自動の控え（アプリ版だけ）：前の控えから7日たっていたら、開いたときに Documents/MiruHikae に。自動の分は新しい4つだけ残す
 // ・読み込み：MichiMiru の分はその場で足し合わせる。MeguMiru の分は MeguMiru（版18〜）が次に開いたときに自分で足し合わせる
@@ -31,6 +31,7 @@ async function hkBuild() {
   const t = Date.now(), apps = {};
   const w = bkObj(); w.ls = {}; ['walk_help_v1', 'walk_days_v1', 'walk_badges_v1', 'walk_wgoal', 'walk_home', 'walk_hist'].forEach(k => { const v = getLS(k); if (v !== null) w.ls[k] = v; }); // 版34：出かけた日・バッジ・週の目標（版39：家・最近の行き先）
   apps.walk = w;
+  { const tk = {}; lsKeys('toko_').forEach(k => { tk[k] = localStorage.getItem(k); }); if (Object.keys(tk).length) apps.toko = {app: 'MiruToko', t, ls: tk}; } // 版40
   if (typeof sumLoad === 'function') { const ws = await sumLoad(); if (ws.length) w.walks = ws; } // 版25：散歩のまとめ
   const db = await meguDb(false);
   if (db) {
@@ -106,6 +107,7 @@ function hkPlan(o, name) {
     p.walk = b;
     p.lines.push('🚶 MichiMiru：' + backupPlan(b, name).replace(/^「[^」]*」(（[^）]*）)?：/, ''));
   }
+  if (a.toko && a.toko.ls) { let n = 0; try { n = Object.values(JSON.parse(a.toko.ls.toko_days_v1 || '{}')).filter(d => d && d.done).length; } catch (e) {} p.lines.push(`🏠 ミルトコ：みちくさの達成 ${n}回。今の記録に足し合わせます`); }
   if (a.megu && a.megu.rec) p.lines.push(`🗾 MeguMiru：行った場所 ${Object.keys(a.megu.rec).length}か所。今の記録に足し合わせます（MeguMiru を次に開いたときに入ります）`);
   const soraHave = lsKeys('sora_').some(k => /^sora_(zukan|catch|day|cities|yoso)_v1$/.test(k));
   if (a.sora && a.sora.data) {
@@ -130,6 +132,7 @@ async function hkApply(p, rep) {
     }
     done.push(`MichiMiru 新しい記録 ${n}本`);
   }
+  if (a.toko && a.toko.ls) { tokoMergeLs(a.toko.ls); done.push('ミルトコ 足し合わせました'); }
   if (a.megu && a.megu.rec) {
     try {
       const db = await meguDb(true);
@@ -161,6 +164,22 @@ async function hkApply(p, rep) {
     } catch (e) { showErr('YamaMiru の分を入れられませんでした（' + jaErr(e) + '）'); }
   }
   status(`控え「${p.name}」を読み込みました（${done.join('・') || '入れるものはありませんでした'}）`);
+}
+
+// 版40：ミルトコの記録を足し合わせる。毎日の記録（toko_days_v1）は日付ごとに、達成のある方を残す。そのほかは今ないときだけ入れる
+function tokoMergeLs(ls) {
+  const pj = v => { try { return JSON.parse(v || '{}') || {}; } catch (e) { return {}; } };
+  Object.entries(ls || {}).forEach(([k, v]) => {
+    if (typeof v !== 'string' || !k.startsWith('toko_')) return;
+    try {
+      if (k === 'toko_days_v1') {
+        const cur = pj(localStorage.getItem(k)), add = pj(v);
+        Object.entries(add).forEach(([d, r]) => { if (r && (!cur[d] || (!cur[d].done && r.done))) cur[d] = r; });
+        localStorage.setItem(k, JSON.stringify(cur));
+      } else if (localStorage.getItem(k) === null) localStorage.setItem(k, v);
+    } catch (e) {}
+  });
+  try { const f = document.getElementById('tokoFrame'); if (f && f.contentWindow && typeof f.contentWindow.tokoReload === 'function') f.contentWindow.tokoReload(); } catch (e) {}
 }
 
 // ---------- 設定タブの欄 ----------
