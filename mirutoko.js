@@ -10,10 +10,13 @@
 //   版41：MichiMiru の画面の上にも同じ緑の帯（body.toko-walk）。▦ はミルトコのときは出さない（ホームに4つのボタンがあるので）
 //   版41：index.html の頭の小さな script が、MichiMiru の画面より先に iframe を作る（開いたらすぐホーム）。ここではそれを引き継ぐ
 // ・散歩を終えたら（まとめを保存したあと）、ホームに「判定して」と頼み、達成ならまとめのカードに1行
+// ・版43：ホーム画面から開いた HP（Web 版のミルトコ）から来たときも、上に緑の帯「◀ TOP に戻る」（TOKO_WEB）
 // ・ホームのみちくさの材料（walk_mk_v1）：近くの神社・寺・公園の数、MeguMiru のまだの場所の数といちばん近い所、山の見え方（版41）
 const TOKO_APP = /MiruTokoApp/.test(navigator.userAgent);
 const TOKO = {f: null, ready: false, shown: false, failed: false, th: '', mkAt: 0};
 const tokoActive = () => TOKO_APP || getLS('walk_toko') === '1';
+// 版43：ホーム画面から開いた HP（Web 版のミルトコ）から来たとき。上に緑の帯「◀ TOP に戻る」（押すと HP の TOP へ移る）
+const TOKO_WEB = (() => { try { return !tokoActive() && window.parent === window && sessionStorage.getItem('toko_web') === '1'; } catch (e) { return false; } })();
 const tokoWin = () => { try { return TOKO.ready && TOKO.f && TOKO.f.contentWindow; } catch (e) { return null; } };
 const TOKO_BG = {light: '#79b0e2', dark: '#1c1f1e'};   // TOP のはじめの絵の空の色・暗い画面の地の色
 const TOKO_URL = () => new URL('../', location.href).href + '?inapp=1';   // ホーム＝HP の TOP
@@ -152,14 +155,14 @@ window.tokoOff = function () {
     strip0.apply(this, arguments);
     const s = $('ovStrip'), bk = s && s.querySelector('.bk'); if (!bk) return;
     const cur = typeof ovCur !== 'undefined' ? ovCur : '';
-    const home = !!(TOKO.f && (TOKO.shown || !cur));
-    const want = home ? 'ホームに戻る' : 'MichiMiru に戻る';
+    const home = !!(TOKO.f && (TOKO.shown || !cur)) || (TOKO_WEB && !cur);
+    const want = home ? (TOKO_WEB ? 'TOP に戻る' : 'ホームに戻る') : 'MichiMiru に戻る';
     if (bk.dataset.t !== want) {
       bk.dataset.t = want;
       bk.innerHTML = `◀ <img class="mi" src="${home ? '../toko/img/icon.svg' : 'icon-192.png'}" alt="" onerror="this.remove()">${want}`;
       s.title = want;
     }
-    if (!s.__toko) { s.__toko = 1; s.onclick = () => { if (typeof ovCur !== 'undefined' && ovCur) ovClose(false); else if (TOKO.f) tokoBackHome(); }; }
+    if (!s.__toko) { s.__toko = 1; s.onclick = () => { if (typeof ovCur !== 'undefined' && ovCur) ovClose(false); else if (TOKO.f) tokoBackHome(); else if (TOKO_WEB) location.href = new URL('../?home=1', location.href).href; }; }
   };
   setInterval(() => { if (document.body.classList.contains('toko-walk') && !(typeof ovCur !== 'undefined' && ovCur)) stripUpd(); }, 5000);
 })();
@@ -196,7 +199,7 @@ async function tokoAfterWalk(o) {
 
 // ---------- みちくさの材料（walk_mk_v1） ----------
 async function tokoMkSave() {
-  if (!TOKO.f || Date.now() - TOKO.mkAt < 120000) return;
+  if ((!TOKO.f && !TOKO_WEB) || Date.now() - TOKO.mkAt < 120000) return;
   const here = (typeof pos !== 'undefined' && pos) || getLSjson('walk_lastpos');
   if (!here) return;
   TOKO.mkAt = Date.now();
@@ -263,4 +266,12 @@ if (tokoActive()) {
   if (resume && last === 'walk') window.tokoGo('walk');
   else if (!resume && typeof ovCur !== 'undefined' && ovCur) ovClose(false);
 }
-setInterval(() => { if (TOKO.f) { tokoTheme(false); if (TOKO.shown) tokoMkSave(); } }, 30000);
+setInterval(() => { if (TOKO.f) { tokoTheme(false); if (TOKO.shown) tokoMkSave(); } else if (TOKO_WEB) tokoMkSave(); }, 30000);
+// 版43：Web 版のミルトコから来たとき
+if (TOKO_WEB) {
+  tokoStyle(); if (typeof ovStyle === 'function') ovStyle();
+  document.body.classList.add('toko-walk');
+  stripUpd();
+  try { map.resize(); } catch (e) {}
+  setTimeout(() => { try { map.resize(); } catch (e) {} tokoMkSave(); }, 8000);
+}
