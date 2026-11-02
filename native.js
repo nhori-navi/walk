@@ -422,15 +422,19 @@ async function skyCheck() {
       let cpaT = null, cpaKm = null;
       if (v > 1) { const ve = v * Math.sin(tr), vn = v * Math.cos(tr), t = -(e * ve + n * vn) / (v * v), tt = Math.max(0, t); cpaT = t; cpaKm = Math.hypot(e + ve * tt, n + vn * tt); }
       const type = c.TYPE[a.t] || a.t || '機種不明', cs = (a.flight || '').trim();
+      // 版44：通知に「どっちの空・いつ・高さ」。押すと MichiMiru の上に見上げカード（miage.js）
+      const altM = typeof a.alt_baro === 'number' ? Math.round(a.alt_baro * 0.3048) : null, altTx = altM ? `・高さ ${altM.toLocaleString()}m` : '';
+      const mg = k => ({ov: 'sora', miage: {k, hex: a.hex, cs, type, lat: +lat.toFixed(5), lon: +lon.toFixed(5), t: now, alt: altM, trk: Math.round(tr * 180 / Math.PI), gs: Math.round(gs)}});
       if (wantMil && (a.dbFlags & 1) && !SKY.sent.has('m' + a.hex)) {
         SKY.sent.add('m' + a.hex); SKY.n++;
-        ntNow('🛩 軍用機が近くにいます', `${type}（${dir8(dir)} ${dist.toFixed(0)}km）`, {ov: 'sora'});
+        ntNow('🛩 軍用機が近くにいます', `${type}　${dir8(dir)}の空 ${dist.toFixed(0)}km${altTx}`, mg('mil'));
         skyLog('mil', cs, type);
       }
       const over = (cpaT != null && cpaT > 0 && cpaT <= win && cpaKm <= 3) || dist <= 2;
       if (wantOver && over && !SKY.sent.has('o' + a.hex)) {
         SKY.sent.add('o' + a.hex); SKY.n++;
-        ntNow('✈ まもなく真上付近を通ります', `${cs ? cs + '・' : ''}${type}（いま${dir8(dir)} ${dist.toFixed(1)}km）`, {ov: 'sora'});
+        const mins = cpaT != null && cpaT > 0.25 ? `あと約${Math.max(1, Math.round(cpaT))}分で真上付近` : 'いま真上付近';
+        ntNow(`✈ ${mins}`, `${cs ? cs + '・' : ''}${type}　いま${dir8(dir)}の空 ${dist.toFixed(1)}km${altTx}`, mg('over'));
         skyLog('over', cs, type);
       }
     });
@@ -522,7 +526,9 @@ function skyLog(k, cs, ty) {
 // 通知を押してアプリが開いたら、その通知のアプリ（TenMiru）を重ねて開く
 function ntTapSetup() {
   if (!NT.ok) return;
-  try { CAP.addListener('LocalNotifications', 'localNotificationActionPerformed', a => { const x = a && a.notification && a.notification.extra, ov = x && x.ov; if (OV[ov]) { ovOpen(ov); if (ov === 'megu' && x.spot) meguShowSpot(x.spot); } }); } catch (e) {}
+  try { CAP.addListener('LocalNotifications', 'localNotificationActionPerformed', a => { const x = a && a.notification && a.notification.extra, ov = x && x.ov;
+    if (x && x.miage && typeof miageOpen === 'function') { miageOpen(x.miage); return; } // 版44：飛行機の知らせは、すぐ出る見上げカードで
+    if (OV[ov]) { ovOpen(ov); if (ov === 'megu' && x.spot) meguShowSpot(x.spot); } }); } catch (e) {}
 }
 
 // ---------- 設定タブの「📱」のカード：アプリ版のときは状態と設定へのボタン ----------
