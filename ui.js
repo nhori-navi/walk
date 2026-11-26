@@ -315,7 +315,7 @@ body.dark .me .dot{left:5px;top:5px;width:24px;height:24px;border-width:3px;box-
   mb.innerHTML = '<button id="mFollow" title="現在地に追従">◎</button><button id="mHead" title="地図の向き">N</button><button id="mLayer" title="地図に出すもの">🗂</button>';
   $('map').appendChild(mb);
   // 版18：🗂 地図に出すもの（設定・あそぶのスイッチと同じもの。こちらを押すと元のスイッチを入切する）
-  const LAYERS = [['meshChk', '🟧 踏破マス'], ['poiShow', '⛩ 神社・寺・公園'], ['walkedChk', '🟢 歩いた道']];
+  const LAYERS = [['meshChk', '🟧 踏破マス'], ['poiShow', '⛩ 神社・寺・公園'], ['walkedChk', '🟢 歩いた道'], ['vknownChk', '🔵 乗り物で通った道'], ['netChk', '〰 道のデータ']]; // 版45：下の2つを足した
   const lb = document.createElement('div'); lb.id = 'layerBox';
   lb.innerHTML = LAYERS.map(([id, t]) => `<label class="sw"><span class="swt">${t}</span><input type="checkbox" data-for="${id}"></label>`).join('');
   $('map').appendChild(lb);
@@ -347,6 +347,7 @@ body.dark .me .dot{left:5px;top:5px;width:24px;height:24px;border-width:3px;box-
   }
   chips('ext', ['なし', '+300m', '+500m', '+1km', '+2km']);
   chips('unexp');
+  chips('vehKnown', ['未踏破のまま', '半分だけ', '歩いた道と同じ']); // 版45
   chips('slope', ['気にしない', '避ける', 'あえて選ぶ']);
   chips('foot');
   chips('poiN', ['1か所', '2か所', '3か所']);
@@ -363,7 +364,7 @@ body.dark .me .dot{left:5px;top:5px;width:24px;height:24px;border-width:3px;box-
   // 閉じていても今の選択が分かるように1行で
   function prefText() {
     const t = [], v = id => $(id).value, nm = id => { const o = $(id).selectedOptions[0]; return o ? o.text : ''; };
-    if (v('unexp') !== '1') t.push('未踏破 ' + nm('unexp'));
+    if (v('unexp') !== '1') t.push('未踏破 ' + nm('unexp') + (v('vehKnown') === '0.5' ? '' : '（乗り物の道は' + nm('vehKnown') + '）'));
     if (v('slope') !== '0') t.push(v('slope') === '1' ? '坂を避ける' : '坂を選ぶ');
     if (v('foot') !== '0') t.push('遊歩道 ' + nm('foot'));
     const poi = [['poiShrine', '⛩'], ['poiTemple', '卍'], ['poiPark', '🌳'], ['poiMegu', '🗾'], ['poiMesh', '🟧']].filter(([id]) => $(id).checked).map(([, ic]) => ic).join('');

@@ -127,7 +127,7 @@ async function ensureGraph(need, fetchBB, retry = true) {
   graph.tr = r; graph.tiles = keys;
   graph.from = fresh ? `${fresh}マスを新しく取得` : `保存済みデータ（${Math.floor((now - oldest) / 864e5)}日前に取得）`;
   saveTileMeta();
-  markWalked(graph);
+  markWalked(graph); markVeh(graph);
   drawNet(); drawPois(); drawTracks();
   ensurePois(graph, true).then(() => updStamps()).catch(() => {}); // スタンプ帳のために神社・寺・公園も用意（失敗しても続ける）
 }
@@ -242,6 +242,70 @@ function markWalked(g, cut) {
     if (hit / n >= 0.5) e.k = 1;
     if (hitO / n >= 0.5) e.k0 = 1;
   });
+}
+
+// ---------- 版45：乗り物で通った道（e.v） ----------
+// 電車以外の乗り物（車・バス・タクシー・自転車など、道を通るもの）で通った道に e.v=1 の印。ルートを選ぶときだけ使う
+// （踏破マス・完全制覇・スタンプ・東海道・はじめて歩いた道は、今までどおり徒歩だけで数える）
+// 乗り物の点は間が広く速いので、歩きより厳しく：記録の線から20m以内で、向きが30°以内のところが道の7割以上あるときだけ
+const VEH_NEAR = 20, VEH_ANG = 30, VEH_HIT = 0.7, VEH_GAP = 300, VEH_MIN = 3;
+const VEH_AUTO = new WeakMap(); // 自動の判定（電車か車か）を記録ごとに覚えておく
+let vehRail = 0; // 線路のデータ：0＝まだ、1＝読み込み中、2＝読めた、3＝読めなかった
+// 道を通った乗り物の区間か。true／false、線路のデータがまだで分からないときは null
+function vehRoadTrack(t) {
+  if (t.k !== 'veh' || !t.pts || t.pts.length < 3) return false; // 2点だけ＝途切れて直線でつないだ区間は使わない
+  if (t.mode === 'car') return true;
+  if (t.mode === 'train') return false;
+  if (typeof railD === 'undefined' || !railD || typeof tabiAuto !== 'function') return null;
+  let m = VEH_AUTO.get(t);
+  if (!m) { m = tabiAuto(t); VEH_AUTO.set(t, m); }
+  return m === 'car';
+}
+// 線路のデータを読んでから、印を付け直す（電車か車かを自動で判定するのに要る。読めなければ手で「車」にした区間だけ使う）
+function vehNeedRail() {
+  if (vehRail || typeof railLoad !== 'function') return;
+  vehRail = 1;
+  railLoad().then(() => { vehRail = 2; if (graph && typeof afterTracksChanged === 'function') afterTracksChanged(); })
+    .catch(() => { vehRail = 3; });
+}
+// 0＝未踏破のまま、0.5＝半分（初め）、1＝歩いた道と同じ
+const vehF = () => { const v = Number(($('vehKnown') || {}).value); return v >= 0 && v <= 1 ? v : 0.5; };
+function markVeh(g) {
+  if (!g) return 0;
+  g.edges.forEach(e => { e.v = 0; });
+  const bb = g.bb, inBB = p => p[0] >= bb.w && p[0] <= bb.e && p[1] >= bb.s && p[1] <= bb.n, segs = [];
+  let need = false;
+  tracks.forEach(t => {
+    const r = vehRoadTrack(t);
+    if (r === null) { need = true; return; }
+    if (!r) return;
+    for (let i = 1; i < t.pts.length; i++) {
+      const a = t.pts[i - 1], b = t.pts[i];
+      if (!inBB(a) && !inBB(b)) continue;
+      const d = distM(a, b);
+      if (d < VEH_MIN || d > VEH_GAP) continue; // 止まっている間の点と、長い途切れ（トンネルなど）は使わない
+      segs.push([a, b]);
+    }
+  });
+  if (need) vehNeedRail();
+  if (!segs.length) return 0;
+  const idx = segIndex(bb, segs), kx = Math.cos((bb.s + bb.n) / 2 * Math.PI / 180) * 111320, ky = 110540, AN = VEH_ANG * Math.PI / 180;
+  const ang = (a, b) => Math.atan2((b[1] - a[1]) * ky, (b[0] - a[0]) * kx);
+  const para = (x, y) => { let d = Math.abs(x - y) % Math.PI; if (d > Math.PI / 2) d = Math.PI - d; return d <= AN; }; // 向きは行き帰りを区別しない
+  let w = 180, e = -180, s = 90, n = -90;
+  segs.forEach(([a, b]) => { w = Math.min(w, a[0], b[0]); e = Math.max(e, a[0], b[0]); s = Math.min(s, a[1], b[1]); n = Math.max(n, a[1], b[1]); });
+  const m = 0.0005; let cnt = 0;
+  g.edges.forEach(ed => {
+    const A = [g.lon[ed.a], g.lat[ed.a]], B = [g.lon[ed.b], g.lat[ed.b]];
+    if (Math.max(A[0], B[0]) < w - m || Math.min(A[0], B[0]) > e + m || Math.max(A[1], B[1]) < s - m || Math.min(A[1], B[1]) > n + m) return;
+    const ea = ang(A, B), k = Math.max(1, Math.ceil(ed.w / 15)); let hit = 0;
+    for (let i = 0; i < k; i++) {
+      const t = (i + 0.5) / k, p = [A[0] + (B[0] - A[0]) * t, A[1] + (B[1] - A[1]) * t];
+      if (idx.all(p, VEH_NEAR).some(sg => para(ang(sg[0], sg[1]), ea))) hit++;
+    }
+    if (hit / k >= VEH_HIT) { ed.v = 1; cnt++; }
+  });
+  return cnt;
 }
 
 // 歩行中：新しく歩いた区間（pts の点の並び）の近くの道にだけ「歩いた」の印を足す。印が増えたら true
@@ -363,6 +427,7 @@ class Heap {
 function astar(g, s, t) {
   const mult = Math.max(Number($('unexp').value) || 1, loopOmMult), sm = slopeMode(), ele = g.ele || null, ff = FOOT_F[Number($('foot').value) || 0];
   const hk = sm === 2 ? 0.6 : 1; // 「あえて選ぶ」は道が軽くなるので、目安の距離も合わせて軽くする
+  const vm = 1 + (mult - 1) * vehF(); // 版45：乗り物で通った道の重み（半分なら、歩いた道の重みの半分だけ重く）
   const n = g.lon.length, d = new Float64Array(n).fill(Infinity), prev = new Int32Array(n).fill(-1), done = new Uint8Array(n);
   const tp = [g.lon[t], g.lat[t]], h = i => distM([g.lon[i], g.lat[i]], tp) * hk;
   const H = new Heap(); d[s] = 0; H.push(h(s), s);
@@ -371,7 +436,7 @@ function astar(g, s, t) {
     if (done[v]) continue; done[v] = 1;
     if (v === t) break;
     for (const [u, e] of g.adj[v]) {
-      let c = (e.k ? e.w * mult : e.w) * ff[e.c || 0];
+      let c = (e.k ? e.w * mult : e.v ? e.w * vm : e.w) * ff[e.c || 0];
       if (e.u) c *= e.u === 2 ? RECENT_F : e.u === 3 ? ORIG_F : REUSE_F; // 版11：前の区間で使った道（×4）・たった今歩いてきた道（×10）は使いにくく。版19：元のルートの残りの道（×0.6）は使いやすく
       if (sm) c = slopeCost(c, e, ele ? ele[v] : NaN, ele ? ele[u] : NaN, sm);
       const nd = d[v] + c;
@@ -390,11 +455,13 @@ function pathLen(g, idx) {
   for (let i = 1; i < idx.length; i++) L += distM([g.lon[idx[i - 1]], g.lat[idx[i - 1]]], [g.lon[idx[i]], g.lat[idx[i]]]);
   return L;
 }
+// 版45：乗り物で通った道は、設定が「半分」なら半分だけ未踏破と数える（「歩いた道と同じ」なら数えない）
+const unexpW = (e, vf) => e.k ? 0 : e.v ? e.w * (1 - vf) : e.w;
 function unexpRatio(g, idx) {
-  let L = 0, U = 0;
+  let L = 0, U = 0; const vf = vehF();
   for (let i = 1; i < idx.length; i++) {
     const e = g.emap.get(edgeKey(idx[i - 1], idx[i])); if (!e) continue;
-    L += e.w; if (!e.k) U += e.w;
+    L += e.w; U += unexpW(e, vf);
   }
   return L ? U / L : 1;
 }

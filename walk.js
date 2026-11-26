@@ -446,7 +446,7 @@ function cleanTrack(t) {
   return {raw, off, dist, rawDist, offDist, segs};
 }
 function drawTracks() {
-  const fw = [], fv = [], fo = [], cleaned = []; let lw = 0, lv = 0, lo = 0, lu = 0;
+  const fw = [], fv = [], fo = [], fk = [], cleaned = []; let lw = 0, lv = 0, lo = 0, lu = 0, lk = 0;
   tracks.forEach(t => {
     if (!t.pts || t.pts.length < 2) return;
     // 乗り物の区間は、記録が途切れた地点どうしを直線で結ぶこともあるので、そのまま描く
@@ -457,17 +457,20 @@ function drawTracks() {
     c.off.forEach(l => fo.push(line(l)[0]));
   });
   // 道のデータを読み込んだ範囲では、歩いたことのある道を1本ずつ描く（何度歩いても線は1本）
+  // 版45：乗り物（電車以外）で通っただけの道は水色で（歩いた道は緑のまま）
   if (graph) graph.edges.forEach(e => {
-    if (!e.k) return;
+    if (!e.k) { if (e.v) { lk += e.w; fk.push(line([[graph.lon[e.a], graph.lat[e.a]], [graph.lon[e.b], graph.lat[e.b]]])[0]); } return; }
     lu += e.w;
     fw.push(line([[graph.lon[e.a], graph.lat[e.a]], [graph.lon[e.b], graph.lat[e.b]]])[0]);
   });
+  setData('vknown', $('vknownChk').checked ? fk : []);
   setData('walked', $('walkedChk').checked ? fw : []);
   setData('veh', $('vehChk').checked ? fv : []);
   setData('off', $('walkedChk').checked && $('offChk').checked ? fo : []);
   const u = lsUsage(), pct = Math.round(u.all / LS_CAP * 100), mine = Math.round(u.mine / LS_CAP * 100);
   $('recStat').innerHTML = `保存済み：歩行 ${(lw / 1000).toFixed(1)}km${lo >= 50 ? `（道から外れた${(lo / 1000).toFixed(1)}kmは除く）` : ''}・乗り物 ${(lv / 1000).toFixed(1)}km` +
-    (graph ? `<br>いま読み込んでいる範囲で歩いた道の長さ：${(lu / 1000).toFixed(1)}km（同じ道は1回と数える）` : '') +
+    (graph ? `<br>いま読み込んでいる範囲で歩いた道の長さ：${(lu / 1000).toFixed(1)}km（同じ道は1回と数える）` +
+      (lk >= 1 ? `・乗り物で通っただけの道 ${(lk / 1000).toFixed(1)}km` : '') : '') +
     (TRK.idb ? `<br>歩いた記録の置き場所：この端末の、たっぷり入る置き場所<span id="trkUse"></span>` : '') +
     `<br>設定などの小さな置き場（同じアドレスのアプリで共有）：約${pct}%使用（うち MichiMiru ${mine}%）`;
   // 版21：大きな置き場の使っている量（ブラウザが答える目安。道のデータなども含む）
@@ -507,13 +510,14 @@ function updToday() {
   $('today').textContent = s.dist >= 1 ? `今日：${fmtDist(s.dist)}・${fmtTime(s.sec)}・${Math.round(s.kcal)}kcal` + (graph || nu ? `・はじめて歩いた道 ${fmtDist(nu)}` : '') : '今日：まだ歩いた記録がありません';
 }
 function afterTracksChanged() {
-  if (graph) markWalked(graph);
+  if (graph) { markWalked(graph); markVeh(graph); } // 版45：乗り物で通った道も
   drawTracks();
   if (typeof tabiRefresh === 'function') tabiRefresh(); // 旅の地図を開いていれば描き直す
   if (route && cands[candIdx] && cands[candIdx].idx && graph) { route.ur = unexpRatio(graph, cands[candIdx].idx); showSummary(); }
 }
 $('walkedChk').onchange = drawTracks;
 $('vehChk').onchange = drawTracks;
+$('vknownChk').addEventListener('change', drawTracks); // 版45
 $('offChk').addEventListener('change', drawTracks);
 // GPXと同じ時間帯のアプリの記録を消す（OpenTracksは画面を消しても途切れないので、そちらを残す）
 function dropDup(parts) {
@@ -611,7 +615,7 @@ function processSeg(raw, src) {
 }
 // ---------- 全部まとめて書き出す・読み込む ----------
 // 書き出す設定（値は保存している文字のまま）。東海道は起点と進み具合を組で扱う
-const BK_SET = ['walk_weight', 'walk_vib', 'walk_autofollow', 'walk_offshow', 'walk_meshshow', 'walk_cmp', 'walk_reroute', 'walk_loopdir', 'walk_theme', 'walk_nightmap', 'walk_font', 'walk_trkm', 'walk_hudfull'];
+const BK_SET = ['walk_weight', 'walk_vib', 'walk_autofollow', 'walk_offshow', 'walk_meshshow', 'walk_cmp', 'walk_reroute', 'walk_loopdir', 'walk_theme', 'walk_nightmap', 'walk_font', 'walk_trkm', 'walk_hudfull', 'walk_vehknown', 'walk_vknown', 'walk_netshow'];
 const BK_TK = ['walk_tokaido_from', 'walk_tokaido_last'];
 const ymdNum = d => `${d.getFullYear()}${String(d.getMonth() + 1).padStart(2, '0')}${String(d.getDate()).padStart(2, '0')}`;
 const trackKey = t => `${t.t0}|${t.k || 'walk'}|${t.pts[0]}`;

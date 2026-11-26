@@ -118,8 +118,8 @@ async function trFar(list, goal, L, run) {
       const g = graph, sa = snap(g, s.p), sb = snap(g, goal);
       if (sa.i < 0 || sb.i < 0 || sa.d > 300 || sb.d > 300) continue;
       const idx = legsPath(g, [sa.i, sb.i]); if (!idx) continue;
-      let len = sa.d + sb.d, ew = 0, un = 0;
-      for (let j = 1; j < idx.length; j++) { const e = g.emap.get(edgeKey(idx[j - 1], idx[j])); if (!e) continue; len += e.w; ew += e.w; if (!e.k) un += e.w; }
+      let len = sa.d + sb.d, ew = 0, un = 0; const vf = vehF(); // 版45：乗り物で通った道は設定のとおりに数える
+      for (let j = 1; j < idx.length; j++) { const e = g.emap.get(edgeKey(idx[j - 1], idx[j])); if (!e) continue; len += e.w; ew += e.w; un += unexpW(e, vf); }
       res.push(Object.assign({}, s, {len, un, ratio: ew ? un / ew : 1}));
     } catch (e) { /* 道のデータが取れない駅は飛ばす */ }
   }

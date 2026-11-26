@@ -24,7 +24,7 @@ function tabiUnpack(f, q) {
 }
 async function tabiLoad() {
   if (cityD && railD) return;
-  const [c, r] = await Promise.all([tabiFile('city.json', 'city_v1'), tabiFile('rail.json', 'rail_v1')]);
+  const [c] = await Promise.all([tabiFile('city.json', 'city_v1'), railLoad()]);
   // 市区町村：0.1°ごとのマスに、重なる市区町村を入れておく
   const cities = c.c.map(([code, pi, name, bb, polys]) => ({code, pref: c.p[pi], name, bb: bb.map(v => v / c.q),
     polys: polys.map(R => R.map(f => tabiUnpack(f, c.q)))}));
@@ -36,6 +36,15 @@ async function tabiLoad() {
       }
   });
   cityD = {cities, grid, prefs: c.p, last: -1};
+}
+// 版45：線路のデータだけを読む（乗り物で通った道で、電車の区間を除くのにも使う）
+let railP = null;
+function railLoad() {
+  if (railD) return Promise.resolve();
+  if (!railP) railP = tabiFile('rail.json', 'rail_v1').then(railBuild).catch(e => { railP = null; throw e; });
+  return railP;
+}
+function railBuild(r) {
   // 線路：0.01°（約1km）ごとのマスに線分を入れておく
   const rg = new Map();
   r.l.forEach(f => {
@@ -199,7 +208,7 @@ function tabiSetMode(i, m) {
   if (m) t.mode = m; else delete t.mode;
   saveTracks();
   if (tabiPop) { tabiPop.remove(); tabiPop = null; }
-  tabiDraw(false);
+  afterTracksChanged(); // 版45：乗り物で通った道の印も付け直す（旅の地図もここで描き直す）
   status(`${ymd(t.t0).replace(/-/g, '/')}の乗り物の区間を「${m ? TABI_MODE[m].nm : '自動の判定'}」にしました`);
 }
 $('tabiBtn').onclick = tabiOpen;

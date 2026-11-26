@@ -105,7 +105,8 @@ $('weight').onchange = () => lsSet('walk_weight', $('weight').value);
 const weight = () => { const w = Number($('weight').value); return w > 0 ? w : 60; };
 function loadFlag(k, d) { try { const v = localStorage.getItem(k); return v === null ? d : v === '1'; } catch (e) { return d; } }
 // 入・切の設定（書き出し・読み込みでも使う）。比較ルートは版5から初め「切」
-const FLAGS = [['vibChk', 'walk_vib', true], ['autoFollowChk', 'walk_autofollow', true], ['offChk', 'walk_offshow', false], ['meshChk', 'walk_meshshow', false], ['cmpChk', 'walk_cmp', false]];
+const FLAGS = [['vibChk', 'walk_vib', true], ['autoFollowChk', 'walk_autofollow', true], ['offChk', 'walk_offshow', false], ['meshChk', 'walk_meshshow', false], ['cmpChk', 'walk_cmp', false],
+  ['netChk', 'walk_netshow', true], ['vknownChk', 'walk_vknown', true]]; // 版45：道のデータは初めから表示・乗り物で通った道
 function loadFlags() { FLAGS.forEach(([id, k, d]) => { $(id).checked = loadFlag(k, d); }); }
 loadFlags();
 FLAGS.forEach(([id, k]) => $(id).addEventListener('change', () => lsSet(k, $(id).checked ? '1' : '0')));

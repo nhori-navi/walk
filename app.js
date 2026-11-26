@@ -14,13 +14,16 @@ map.on('load', () => {
   const empty = {type:'FeatureCollection', features:[]};
   map.addSource('acc', {type:'geojson', data:empty});
   map.addLayer({id:'acc', type:'fill', source:'acc', paint:{'fill-color':['get', 'c'], 'fill-opacity':0.13, 'fill-outline-color':['get', 'c']}});
-  ['mesh', 'off', 'walked', 'veh', 'net', 'cmp', 'route', 'poi', 'meshRem', 'tkLine', 'tkSt', 'tabiCity', 'tabiLine'].forEach(id => map.addSource(id, {type:'geojson', data:empty}));
+  ['mesh', 'off', 'vknown', 'walked', 'veh', 'net', 'cmp', 'route', 'poi', 'meshRem', 'tkLine', 'tkSt', 'tabiCity', 'tabiLine'].forEach(id => map.addSource(id, {type:'geojson', data:empty}));
   // 踏破マス：歩いた＝オレンジ、残り200m以下＝濃いオレンジ、完全制覇＝金色
   map.addLayer({id:'mesh', type:'fill', source:'mesh', paint:{
     'fill-color':['match', ['get', 'c'], 'done', '#f1c40f', 'near', '#d35400', '#f39c12'],
     'fill-opacity':['match', ['get', 'c'], 'done', 0.45, 'near', 0.3, 0.22], 'fill-outline-color':'#e67e22'}});
   map.addLayer({id:'off', type:'line', source:'off',
     paint:{'line-color':'#888', 'line-width':2.5, 'line-dasharray':[1, 2], 'line-opacity':0.7}});
+  // 版45：乗り物（電車以外）で通っただけの道（歩いた道の下に、細めの水色）
+  map.addLayer({id:'vknown', type:'line', source:'vknown', layout:{'line-cap':'round', 'line-join':'round'},
+    paint:{'line-color':'#3498db', 'line-width':['interpolate', ['linear'], ['zoom'], 12, 2, 17, 7], 'line-opacity':0.45}});
   map.addLayer({id:'walked', type:'line', source:'walked', layout:{'line-cap':'round', 'line-join':'round'},
     paint:{'line-color':'#2ecc71', 'line-width':['interpolate', ['linear'], ['zoom'], 12, 3, 17, 10], 'line-opacity':0.55}});
   map.addLayer({id:'veh', type:'line', source:'veh', layout:{'line-cap':'round', 'line-join':'round'},
@@ -420,6 +423,9 @@ $('viaClear').onclick = () => { clearVia(); calc(); };
 $('recalcBtn').onclick = () => (walk && route) ? reroute('manual') : calc(); // 版11：歩行中は「組み直す」
 $('ext').onchange = () => { if (dest && mode === 'to') calc('to'); };
 $('unexp').onchange = () => { if (route) calc(); };
+// 版45：乗り物で通った道の扱い（未踏破のまま／半分／歩いた道と同じ）。覚えておく
+{ const v = getLS('walk_vehknown'); if (v === '0' || v === '0.5' || v === '1') $('vehKnown').value = v; }
+$('vehKnown').onchange = () => { lsSet('walk_vehknown', $('vehKnown').value); if (route) calc(); };
 $('slope').onchange = () => { if (route) calc(); };
 $('foot').onchange = () => { if (route) calc(); };
 $('poiN').onchange = () => { if (route && poiKinds().length) calc(); };
